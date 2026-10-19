@@ -1,0 +1,6 @@
+{
+  "name": "IT Savodxonlik Maktabi",
+  "description": "1-4 va 5-9 sinflar uchun IT savodxonligi va Grafik dizayn ta'lim platformasi. O'qituvchi kabineti orqali o'quvchilarga login/parol berish va har bir dars bo'yicha ball qo'yish tizimi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
