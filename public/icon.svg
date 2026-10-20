@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#142215"/>
+      <stop offset="50%" stop-color="#1C2C1D"/>
+      <stop offset="100%" stop-color="#2C3E2D"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A7F3D0"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded App Icon Background -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)"/>
+  <rect width="504" height="504" x="4" y="4" rx="116" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+
+  <!-- Glowing Accent Ring -->
+  <circle cx="256" cy="240" r="180" fill="none" stroke="url(#goldGrad)" stroke-width="2" stroke-dasharray="8 12" opacity="0.3"/>
+
+  <!-- Laptop / Computer Base -->
+  <g filter="url(#shadow)">
+    <!-- Screen Body -->
+    <rect x="120" y="140" width="272" height="180" rx="20" fill="#111A13" stroke="url(#goldGrad)" stroke-width="6"/>
+    <!-- Screen Inner Display -->
+    <rect x="136" y="156" width="240" height="148" rx="10" fill="#18251B"/>
+
+    <!-- Code / Academic Graphic inside screen -->
+    <!-- Graduation Cap Symbol inside screen -->
+    <path d="M256 180 L320 212 L256 244 L192 212 Z" fill="url(#goldGrad)"/>
+    <path d="M216 226 L216 256 C216 270 296 270 296 256 L296 226" fill="none" stroke="url(#goldGrad)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M320 212 L320 250" stroke="#FDE68A" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="320" cy="254" r="5" fill="#FDE68A"/>
+
+    <!-- Code Brackets <> -->
+    <path d="M165 210 L150 225 L165 240" fill="none" stroke="url(#emeraldGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M347 210 L362 225 L347 240" fill="none" stroke="url(#emeraldGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Laptop Keyboard Base -->
+    <path d="M86 324 L426 324 L400 354 L112 354 Z" fill="url(#goldGrad)"/>
+    <rect x="220" y="332" width="72" height="8" rx="4" fill="#92400E"/>
+  </g>
+
+  <!-- Stars of Excellence -->
+  <polygon points="256,70 263,88 282,88 267,100 272,118 256,106 240,118 245,100 230,88 249,88" fill="url(#goldGrad)"/>
+  <polygon points="170,95 174,106 186,106 177,113 180,124 170,117 160,124 163,113 154,106 166,106" fill="url(#goldGrad)" opacity="0.7"/>
+  <polygon points="342,95 346,106 358,106 349,113 352,124 342,117 332,124 335,113 326,106 338,106" fill="url(#goldGrad)" opacity="0.7"/>
+
+  <!-- Brand Typography -->
+  <text x="256" y="420" font-family="system-ui, -apple-system, sans-serif" font-size="34" font-weight="900" font-style="italic" fill="#FFFFFF" text-anchor="middle" letter-spacing="3">
+    IT SAVODXONLIK
+  </text>
+  <text x="256" y="454" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#F59E0B" text-anchor="middle" letter-spacing="5">
+    AKADEMIYASI
+  </text>
+</svg>

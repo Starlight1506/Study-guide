@@ -428,6 +428,9 @@ ${lessonContext ? `Joriy dars mazmuni: ${lessonContext}` : ''}`;
     }
   });
 
+  // Public static assets (manifest.json, icon.svg, sw.js)
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   // Vite and static asset serving
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

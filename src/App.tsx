@@ -49,7 +49,8 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Layers,
-  Calendar
+  Calendar,
+  Smartphone
 } from 'lucide-react';
 import { exportLessonToPdf } from './utils/pdfExport.ts';
 import { AiAssistant } from './components/AiAssistant.tsx';
@@ -61,6 +62,7 @@ import { TeacherDashboard } from './components/TeacherDashboard.tsx';
 import { ThemeToggle } from './components/ThemeToggle.tsx';
 import LessonRatingFeedbackView from './components/LessonRatingFeedback.tsx';
 import LessonScheduleCalendar from './components/LessonScheduleCalendar.tsx';
+import AppInstallModal from './components/AppInstallModal.tsx';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -72,6 +74,7 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isTrackSelectionOpen, setIsTrackSelectionOpen] = useState<boolean>(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
   const [currentTrack, setCurrentTrack] = useState<CourseTrack>('literacy'); // 'literacy' (Kompyuter savodxonligi) | 'design' (Grafik dizayn)
   const [designCompletedLessons, setDesignCompletedLessons] = useState<number[]>([]);
 
@@ -616,6 +619,16 @@ export default function App() {
           >
             <Calendar className="w-3.5 h-3.5 text-[#8BA88E]" />
             <span className="hidden sm:inline">Dars Jadvali</span>
+          </button>
+
+          {/* Mobile App & APK Modal Trigger */}
+          <button
+            onClick={() => setIsInstallModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400/20 to-amber-300/20 hover:from-amber-400/30 hover:to-amber-300/30 border border-amber-400/40 text-xs font-bold text-amber-800 dark:text-amber-300 transition flex items-center gap-1.5 shadow-xs"
+            title="Mobil ilovani telefoningizga o'rnatish yoki APK chiqarish"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="hidden sm:inline">Ilova (APK)</span>
           </button>
 
           {/* Global Dark Mode Switcher */}
@@ -1539,6 +1552,12 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* APP INSTALL & APK GENERATION MODAL */}
+      <AppInstallModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+      />
 
     </div>
   );
