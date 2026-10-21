@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { AppUser, UserRole } from './LoginModal';
 import { ThemeToggle } from './ThemeToggle';
+import { PWAInstallButton } from './PWAInstallButton';
 import { 
   authenticateStudent, 
   getStoredStudents, 
@@ -143,17 +144,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
       {/* Top Simple Brand Bar */}
       <header className="px-6 py-5 flex items-center justify-between max-w-6xl mx-auto w-full relative z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl bg-[#2C3E2D] dark:bg-[#1E2E20] border dark:border-[#384F3B] flex items-center justify-center text-white shadow-md">
-            <Award className="w-5.5 h-5.5 text-[#8BA88E]" />
-          </div>
+        <div className="flex items-center gap-3">
+          <img
+            src="/pwa-192x192.png"
+            alt="SMART HIGH SCHOOL Logo"
+            className="w-11 h-11 rounded-full object-cover shadow-md border-2 border-[#8BA88E]/40"
+          />
           <div>
-            <h1 className="text-xl font-serif italic text-[#1A2E1C] dark:text-[#EBF1EC] font-bold tracking-tight">IT Ta'lim Portali</h1>
-            <p className="text-[10px] text-[#8BA88E] font-bold tracking-wider uppercase">Yagona IT va Dizayn Ta'lim Tizimi</p>
+            <h1 className="text-xl font-serif italic text-[#1A2E1C] dark:text-[#EBF1EC] font-bold tracking-tight">SMART HIGH SCHOOL</h1>
+            <p className="text-[10px] text-[#8BA88E] font-bold tracking-wider uppercase">IT Savodxonlik va Dizayn Ta'lim Portali</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <PWAInstallButton />
           <ThemeToggle showLabel={false} />
 
           <div className="hidden sm:flex items-center gap-2 text-xs text-[#828282] dark:text-[#A3B8A6] bg-white/80 dark:bg-[#19241B] px-3.5 py-1.5 rounded-full border border-[#EBE7DF] dark:border-[#2C3E2D]">

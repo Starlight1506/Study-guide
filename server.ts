@@ -9,7 +9,9 @@ import {
   users, 
   studentsTable, 
   studentGradesTable, 
-  lessonRatingsTable 
+  lessonRatingsTable,
+  homeworkAssignmentsTable,
+  homeworkSubmissionsTable
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { eq, and, desc } from 'drizzle-orm';
@@ -33,8 +35,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // JSON body parser
-  app.use(express.json());
+  // JSON body parser (25MB limit for homework image and file uploads)
+  app.use(express.json({ limit: '25mb' }));
 
   // API Health check
   app.get('/api/health', (req, res) => {
@@ -427,6 +429,117 @@ ${lessonContext ? `Joriy dars mazmuni: ${lessonContext}` : ''}`;
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // HOMEWORK ASSIGNMENTS & SUBMISSIONS API (Cross-device persistence)
+  // ---------------------------------------------------------------------------
+  // GET all homework assignments
+  app.get('/api/homeworks', async (_req, res) => {
+    try {
+      const records = await db
+        .select()
+        .from(homeworkAssignmentsTable)
+        .orderBy(desc(homeworkAssignmentsTable.createdAt));
+      res.json({ assignments: records });
+    } catch (error: any) {
+      console.error('Error fetching homeworks:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST create or update homework assignment
+  app.post('/api/homeworks', async (req, res) => {
+    try {
+      const assignment = req.body;
+      if (!assignment.id || !assignment.title || !assignment.track) {
+        return res.status(400).json({ error: 'Missing homework fields' });
+      }
+      const existing = await db
+        .select()
+        .from(homeworkAssignmentsTable)
+        .where(eq(homeworkAssignmentsTable.id, assignment.id));
+      if (existing.length > 0) {
+        await db
+          .update(homeworkAssignmentsTable)
+          .set(assignment)
+          .where(eq(homeworkAssignmentsTable.id, assignment.id));
+      } else {
+        await db.insert(homeworkAssignmentsTable).values(assignment);
+      }
+      res.json({ success: true, assignment });
+    } catch (error: any) {
+      console.error('Error saving homework:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // DELETE homework assignment and its submissions
+  app.delete('/api/homeworks/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(homeworkAssignmentsTable).where(eq(homeworkAssignmentsTable.id, id));
+      await db.delete(homeworkSubmissionsTable).where(eq(homeworkSubmissionsTable.assignmentId, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting homework:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET all homework submissions
+  app.get('/api/homework-submissions', async (_req, res) => {
+    try {
+      const records = await db
+        .select()
+        .from(homeworkSubmissionsTable)
+        .orderBy(desc(homeworkSubmissionsTable.submittedAt));
+      res.json({ submissions: records });
+    } catch (error: any) {
+      console.error('Error fetching homework submissions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST create or update homework submission (student upload or teacher grading)
+  app.post('/api/homework-submissions', async (req, res) => {
+    try {
+      const submission = req.body;
+      if (!submission.id || !submission.assignmentId || !submission.studentId) {
+        return res.status(400).json({ error: 'Missing submission fields' });
+      }
+      const existing = await db
+        .select()
+        .from(homeworkSubmissionsTable)
+        .where(eq(homeworkSubmissionsTable.id, submission.id));
+      if (existing.length > 0) {
+        await db
+          .update(homeworkSubmissionsTable)
+          .set(submission)
+          .where(eq(homeworkSubmissionsTable.id, submission.id));
+      } else {
+        await db.insert(homeworkSubmissionsTable).values(submission);
+      }
+      res.json({ success: true, submission });
+    } catch (error: any) {
+      console.error('Error saving homework submission:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // DELETE single homework submission
+  app.delete('/api/homework-submissions/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(homeworkSubmissionsTable).where(eq(homeworkSubmissionsTable.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting homework submission:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Public static assets (manifest.json, icon.svg, sw.js)
+  app.use(express.static(path.join(process.cwd(), 'public')));
 
   // Vite and static asset serving
   if (process.env.NODE_ENV !== 'production') {

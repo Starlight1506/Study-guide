@@ -59,6 +59,7 @@ import { TrackSelectionModal, CourseTrack } from './components/TrackSelectionMod
 import { DesignCourseView } from './components/DesignCourseView.tsx';
 import { TeacherDashboard } from './components/TeacherDashboard.tsx';
 import { ThemeToggle } from './components/ThemeToggle.tsx';
+import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 import LessonRatingFeedbackView from './components/LessonRatingFeedback.tsx';
 import LessonScheduleCalendar from './components/LessonScheduleCalendar.tsx';
 
@@ -498,11 +499,13 @@ export default function App() {
             }
           }}
         >
-          <div className="w-10 h-10 rounded-xl bg-[#8BA88E] flex items-center justify-center text-white shadow-md shadow-[#8BA88E]/20">
-            <Award className="w-5.5 h-5.5" />
-          </div>
+          <img
+            src="/pwa-192x192.png"
+            alt="SMART HIGH SCHOOL Logo"
+            className="w-10 h-10 rounded-full object-cover shadow-md border-2 border-[#8BA88E]/40"
+          />
           <div>
-            <h1 className="text-lg md:text-xl font-serif italic text-[#1A2E1C] dark:text-[#E6EAE7] tracking-tight">IT Ta'lim Portali</h1>
+            <h1 className="text-lg md:text-xl font-serif italic text-[#1A2E1C] dark:text-[#E6EAE7] tracking-tight">SMART HIGH SCHOOL</h1>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-[#8BA88E] font-bold tracking-wider uppercase">
                 {appUser?.role === 'teacher' 
@@ -617,6 +620,9 @@ export default function App() {
             <Calendar className="w-3.5 h-3.5 text-[#8BA88E]" />
             <span className="hidden sm:inline">Dars Jadvali</span>
           </button>
+
+          {/* In-App PWA Install Button */}
+          <PWAInstallButton />
 
           {/* Global Dark Mode Switcher */}
           <ThemeToggle />

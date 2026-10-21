@@ -97,3 +97,41 @@ export const lessonRatingsTable = pgTable('lesson_ratings', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at'),
 });
+
+export const homeworkAssignmentsTable = pgTable('homework_assignments', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  track: text('track').notNull(),
+  lessonId: integer('lesson_id').notNull(),
+  lessonTitle: text('lesson_title').notNull(),
+  targetGroup: text('target_group').notNull().default('all'),
+  dueDate: text('due_date'),
+  maxScore: integer('max_score').notNull().default(100),
+  attachmentUrl: text('attachment_url'),
+  attachmentName: text('attachment_name'),
+  teacherName: text('teacher_name'),
+  createdAt: text('created_at').notNull(),
+});
+
+export const homeworkSubmissionsTable = pgTable('homework_submissions', {
+  id: text('id').primaryKey(),
+  assignmentId: text('assignment_id').notNull(),
+  studentId: text('student_id').notNull(),
+  studentName: text('student_name').notNull(),
+  studentLogin: text('student_login'),
+  track: text('track').notNull(),
+  lessonId: integer('lesson_id').notNull(),
+  lessonTitle: text('lesson_title').notNull(),
+  comment: text('comment'),
+  fileDataUrl: text('file_data_url').notNull(),
+  fileName: text('file_name').notNull(),
+  fileType: text('file_type').notNull(),
+  status: text('status').notNull().default('pending'),
+  score: integer('score'),
+  maxScore: integer('max_score').default(100),
+  teacherFeedback: text('teacher_feedback'),
+  submittedAt: text('submitted_at').notNull(),
+  gradedAt: text('graded_at'),
+});
+

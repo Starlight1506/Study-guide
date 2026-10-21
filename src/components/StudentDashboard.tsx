@@ -34,6 +34,8 @@ import {
 import StudentProfileView from './StudentProfileView';
 import StudentLeaderboard from './StudentLeaderboard';
 import LessonScheduleCalendar from './LessonScheduleCalendar';
+import HomeworkCenter from './HomeworkCenter';
+import { getAssignmentsForStudent } from '../services/homeworkManager';
 import { 
   getNextLessonForStudent, 
   getGroupByStudent,
@@ -77,7 +79,19 @@ export default function StudentDashboard({
   onSelectLesson, 
   onSelectTrackLesson 
 }: DashboardProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'teacher_grades' | 'leaderboard' | 'lessons' | 'games' | 'schedule'>('teacher_grades');
+  const [activeSubTab, setActiveSubTab] = useState<'teacher_grades' | 'homework' | 'leaderboard' | 'lessons' | 'games' | 'schedule'>('teacher_grades');
+  const [myHomeworksCount, setMyHomeworksCount] = useState<number>(0);
+
+  useEffect(() => {
+    const updateHw = () => {
+      const idOrLogin = appUser?.uid || appUser?.email || '';
+      const list = getAssignmentsForStudent(idOrLogin, appUser?.name);
+      setMyHomeworksCount(list.length);
+    };
+    updateHw();
+    window.addEventListener('homeworks_updated', updateHw);
+    return () => window.removeEventListener('homeworks_updated', updateHw);
+  }, [appUser]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<StudentAccount | null>(null);
   const [grades, setGrades] = useState<StudentGrade[]>([]);
@@ -328,6 +342,21 @@ export default function StudentDashboard({
           <span>Ustoz Baholari</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-bold">
             {grades.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('homework')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            activeSubTab === 'homework'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-amber-400" />
+          <span>Uyga Vazifalar</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
+            {myHomeworksCount}
           </span>
         </button>
 
@@ -616,6 +645,18 @@ export default function StudentDashboard({
             onSelectTrackLesson={onSelectTrackLesson}
           />
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* HOMEWORK ASSIGNMENTS & SUBMISSIONS (UYGA VAZIFALAR)                       */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'homework' && (
+        <HomeworkCenter
+          role="student"
+          studentId={currentStudent.id}
+          studentName={currentStudent.fullName}
+          studentLogin={currentStudent.login}
+        />
       )}
 
       {/* ========================================================================= */}

@@ -31,7 +31,8 @@ import {
   Send,
   Clock,
   ArrowUpRight,
-  Trophy
+  Trophy,
+  FileText
 } from 'lucide-react';
 import { UNIFIED_CURRICULUM } from '../data/curriculum';
 import { DESIGN_CURRICULUM } from '../data/designCurriculum';
@@ -56,6 +57,8 @@ import {
 import StudentProfileView from './StudentProfileView';
 import LessonScheduleCalendar from './LessonScheduleCalendar';
 import StudentLeaderboard from './StudentLeaderboard';
+import HomeworkCenter from './HomeworkCenter';
+import { getStoredSubmissions } from '../services/homeworkManager';
 
 interface TeacherDashboardProps {
   onNavigateToTrack: (track: 'literacy' | 'design') => void;
@@ -69,7 +72,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onSelectStudentLesson,
 }) => {
   // Main Tab State
-  const [activeSubTab, setActiveSubTab] = useState<'students' | 'grading' | 'reviews' | 'leaderboard' | 'schedule' | 'courses'>('students');
+  const [activeSubTab, setActiveSubTab] = useState<'students' | 'grading' | 'homework' | 'reviews' | 'leaderboard' | 'schedule' | 'courses'>('students');
+  const [pendingHwCount, setPendingHwCount] = useState<number>(0);
+
+  useEffect(() => {
+    const updateHwCount = () => {
+      const subs = getStoredSubmissions();
+      setPendingHwCount(subs.filter((s) => s.status === 'pending').length);
+    };
+    updateHwCount();
+    window.addEventListener('homeworks_updated', updateHwCount);
+    return () => window.removeEventListener('homeworks_updated', updateHwCount);
+  }, []);
 
   // Students, Grades & Ratings state
   const [students, setStudents] = useState<StudentAccount[]>([]);
@@ -474,6 +488,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <span>Ustoz Baholash Jurnali</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-bold">
             {grades.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('homework')}
+          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            activeSubTab === 'homework'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-amber-400" />
+          <span>Uyga Vazifalar</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
+            {pendingHwCount > 0 ? `+${pendingHwCount} yangi` : 'Tekshirish'}
           </span>
         </button>
 
@@ -1486,6 +1515,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: HOMEWORK ASSIGNMENTS & STUDENT SUBMISSIONS (UYGA VAZIFALAR)      */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'homework' && (
+        <div className="flex flex-col gap-6">
+          <HomeworkCenter role="teacher" teacherName={teacherName} />
         </div>
       )}
 
