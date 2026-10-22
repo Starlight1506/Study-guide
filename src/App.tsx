@@ -73,7 +73,8 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isTrackSelectionOpen, setIsTrackSelectionOpen] = useState<boolean>(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false);
-  const [currentTrack, setCurrentTrack] = useState<CourseTrack>('literacy'); // 'literacy' (Kompyuter savodxonligi) | 'design' (Grafik dizayn)
+  const [currentTrack, setCurrentTrack] = useState<CourseTrack>('literacy'); // 'literacy' (Kompyuter savodxonligi) | 'design' (Grafik dizayn & Frontend)
+  const [designCategory, setDesignCategory] = useState<'all' | 'design' | 'frontend'>('all');
   const [designCompletedLessons, setDesignCompletedLessons] = useState<number[]>([]);
 
   // Layout states
@@ -219,8 +220,11 @@ export default function App() {
     }
   };
 
-  const handleTrackSelect = (track: CourseTrack) => {
+  const handleTrackSelect = (track: CourseTrack, subCategory?: 'all' | 'design' | 'frontend') => {
     setCurrentTrack(track);
+    if (subCategory) {
+      setDesignCategory(subCategory);
+    }
     setIsTrackSelectionOpen(false);
     setActiveTab('curriculum');
 
@@ -511,7 +515,9 @@ export default function App() {
                 {appUser?.role === 'teacher' 
                   ? "O'qituvchi Markazi" 
                   : currentTrack === 'design' 
-                    ? "🎨 Grafik Dizayn Bo'limi" 
+                    ? designCategory === 'frontend'
+                      ? "💻 Frontend Dasturlash (HTML5 & CSS3)"
+                      : "🎨 Grafik Dizayn & Frontend Bo'limi" 
                     : "💻 Kompyuter Savodxonligi (36 dars)"}
               </span>
             </div>
@@ -525,47 +531,58 @@ export default function App() {
             <div className="flex items-center gap-1.5 bg-[#F5F5F0] dark:bg-[#1A261D] p-1 rounded-xl border border-[#EBE7DF] dark:border-[#283A2C]">
               <button
                 onClick={() => setActiveTab('teacher_overview')}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
                   activeTab === 'teacher_overview'
                     ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
                     : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                🏢 O'qituvchi Kabineti
+                🏢 Kabinet
               </button>
               <button
                 onClick={() => { setCurrentTrack('literacy'); setActiveTab('curriculum'); }}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
                   activeTab === 'curriculum' && currentTrack === 'literacy'
                     ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
                     : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                💻 Savodxonlik (36 dars)
+                💻 Savodxonlik
               </button>
               <button
-                onClick={() => { setCurrentTrack('design'); setActiveTab('curriculum'); }}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  activeTab === 'curriculum' && currentTrack === 'design'
+                onClick={() => { setCurrentTrack('design'); setDesignCategory('design'); setActiveTab('curriculum'); }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === 'curriculum' && currentTrack === 'design' && designCategory !== 'frontend'
                     ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
                     : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
                 <Palette className="w-3.5 h-3.5" />
-                🎨 Dizayn Kursi
+                🎨 Dizayn (Canva/Figma)
+              </button>
+              <button
+                onClick={() => { setCurrentTrack('design'); setDesignCategory('frontend'); setActiveTab('curriculum'); }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === 'curriculum' && currentTrack === 'design' && designCategory === 'frontend'
+                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
+                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                🌐 Frontend (HTML/CSS)
               </button>
               <button
                 onClick={() => setActiveTab('dashboard')}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
                   activeTab === 'dashboard'
                     ? 'bg-white dark:bg-[#203023] text-[#2D2D2D] dark:text-[#E6EAE7] border border-[#EBE7DF] dark:border-[#2F4433] shadow-sm'
                     : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
                 <Trophy className="w-3.5 h-3.5 text-[#8BA88E]" />
-                📊 Baholar Jurnali
+                📊 Baholar
               </button>
             </div>
           ) : (
@@ -825,12 +842,13 @@ export default function App() {
             }}
           />
         ) : currentTrack === 'design' ? (
-          /* 2.3 TAB: DESIGN COURSE VIEW (Grafik Dizayn) */
+          /* 2.3 TAB: DESIGN & FRONTEND COURSE VIEW (Canva, Figma, HTML5, CSS3) */
           <DesignCourseView
             onOpenAi={(title, ctx) => setIsAiOpen(true)}
             completedLessons={designCompletedLessons}
             onToggleComplete={handleToggleDesignLesson}
             appUser={appUser}
+            initialCategory={designCategory}
           />
         ) : (
           /* 2.4 MAIN LITERACY CURRICULUM BROWSER (Kompyuter Savodxonligi - 36 ta dars) */
