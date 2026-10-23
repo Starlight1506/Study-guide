@@ -18,7 +18,8 @@ import {
   TrendingUp,
   KeyRound,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Coins
 } from 'lucide-react';
 import { UNIFIED_CURRICULUM, Lesson } from '../data/curriculum';
 import { DESIGN_CURRICULUM } from '../data/designCurriculum';
@@ -35,7 +36,9 @@ import StudentProfileView from './StudentProfileView';
 import StudentLeaderboard from './StudentLeaderboard';
 import LessonScheduleCalendar from './LessonScheduleCalendar';
 import HomeworkCenter from './HomeworkCenter';
+import SmartCoinCenter from './SmartCoinCenter';
 import { getAssignmentsForStudent } from '../services/homeworkManager';
+import { getStudentCoinSummary } from '../services/smartCoinManager';
 import { 
   getNextLessonForStudent, 
   getGroupByStudent,
@@ -79,8 +82,9 @@ export default function StudentDashboard({
   onSelectLesson, 
   onSelectTrackLesson 
 }: DashboardProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'teacher_grades' | 'homework' | 'leaderboard' | 'lessons' | 'games' | 'schedule'>('teacher_grades');
+  const [activeSubTab, setActiveSubTab] = useState<'teacher_grades' | 'smart_coins' | 'homework' | 'leaderboard' | 'lessons' | 'games' | 'schedule'>('teacher_grades');
   const [myHomeworksCount, setMyHomeworksCount] = useState<number>(0);
+  const [myCoinBalance, setMyCoinBalance] = useState<number>(0);
 
   useEffect(() => {
     const updateHw = () => {
@@ -88,9 +92,19 @@ export default function StudentDashboard({
       const list = getAssignmentsForStudent(idOrLogin, appUser?.name);
       setMyHomeworksCount(list.length);
     };
+    const updateCoins = () => {
+      const idOrLogin = appUser?.uid || appUser?.email || '';
+      const summary = getStudentCoinSummary(idOrLogin, appUser?.name);
+      setMyCoinBalance(summary.totalCoins);
+    };
     updateHw();
+    updateCoins();
     window.addEventListener('homeworks_updated', updateHw);
-    return () => window.removeEventListener('homeworks_updated', updateHw);
+    window.addEventListener('smart_coins_updated', updateCoins);
+    return () => {
+      window.removeEventListener('homeworks_updated', updateHw);
+      window.removeEventListener('smart_coins_updated', updateCoins);
+    };
   }, [appUser]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<StudentAccount | null>(null);
@@ -258,7 +272,20 @@ export default function StudentDashboard({
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div
+                onClick={() => setActiveSubTab('smart_coins')}
+                className="bg-amber-400/20 hover:bg-amber-400/30 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-400/40 text-center min-w-[95px] cursor-pointer transition group"
+                title="SMART COIN hamyonimga o'tish"
+              >
+                <p className="text-[10px] text-amber-300 uppercase font-bold flex items-center justify-center gap-1">
+                  <Coins className="w-3 h-3 text-amber-300" />
+                  <span>SMART COIN</span>
+                </p>
+                <p className="text-2xl font-serif italic text-amber-300 font-bold mt-0.5 group-hover:scale-105 transition-transform">
+                  {myCoinBalance} SC
+                </p>
+              </div>
               <div 
                 onClick={() => setActiveSubTab('leaderboard')}
                 className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 text-center min-w-[90px] cursor-pointer transition group"
@@ -342,6 +369,21 @@ export default function StudentDashboard({
           <span>Ustoz Baholari</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-bold">
             {grades.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('smart_coins')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            activeSubTab === 'smart_coins'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md'
+              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+          }`}
+        >
+          <Coins className="w-4 h-4 text-amber-400" />
+          <span>🪙 SMART COIN</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-700 dark:text-amber-200 font-bold">
+            {myCoinBalance} SC
           </span>
         </button>
 
@@ -645,6 +687,17 @@ export default function StudentDashboard({
             onSelectTrackLesson={onSelectTrackLesson}
           />
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SMART COIN WALLET, LEADERBOARD & JOURNAL                                  */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'smart_coins' && (
+        <SmartCoinCenter
+          mode="student"
+          studentIdOrLogin={currentStudent.id}
+          studentName={currentStudent.fullName}
+        />
       )}
 
       {/* ========================================================================= */}

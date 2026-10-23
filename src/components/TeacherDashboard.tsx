@@ -32,7 +32,8 @@ import {
   Clock,
   ArrowUpRight,
   Trophy,
-  FileText
+  FileText,
+  Coins
 } from 'lucide-react';
 import { UNIFIED_CURRICULUM } from '../data/curriculum';
 import { DESIGN_CURRICULUM } from '../data/designCurriculum';
@@ -58,7 +59,9 @@ import StudentProfileView from './StudentProfileView';
 import LessonScheduleCalendar from './LessonScheduleCalendar';
 import StudentLeaderboard from './StudentLeaderboard';
 import HomeworkCenter from './HomeworkCenter';
+import SmartCoinCenter from './SmartCoinCenter';
 import { getStoredSubmissions } from '../services/homeworkManager';
+import { getStudentCoinSummary, getStoredSmartCoins } from '../services/smartCoinManager';
 
 interface TeacherDashboardProps {
   onNavigateToTrack: (track: 'literacy' | 'design') => void;
@@ -72,17 +75,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onSelectStudentLesson,
 }) => {
   // Main Tab State
-  const [activeSubTab, setActiveSubTab] = useState<'students' | 'grading' | 'homework' | 'reviews' | 'leaderboard' | 'schedule' | 'courses'>('students');
+  const [activeSubTab, setActiveSubTab] = useState<'students' | 'grading' | 'smart_coins' | 'homework' | 'reviews' | 'leaderboard' | 'schedule' | 'courses'>('students');
   const [pendingHwCount, setPendingHwCount] = useState<number>(0);
+  const [totalCoinsCount, setTotalCoinsCount] = useState<number>(0);
+  const [coinTargetStudentId, setCoinTargetStudentId] = useState<string>('');
 
   useEffect(() => {
     const updateHwCount = () => {
       const subs = getStoredSubmissions();
       setPendingHwCount(subs.filter((s) => s.status === 'pending').length);
     };
+    const updateCoinCount = () => {
+      const coins = getStoredSmartCoins();
+      setTotalCoinsCount(coins.reduce((sum, c) => sum + c.amount, 0));
+    };
     updateHwCount();
+    updateCoinCount();
     window.addEventListener('homeworks_updated', updateHwCount);
-    return () => window.removeEventListener('homeworks_updated', updateHwCount);
+    window.addEventListener('smart_coins_updated', updateCoinCount);
+    return () => {
+      window.removeEventListener('homeworks_updated', updateHwCount);
+      window.removeEventListener('smart_coins_updated', updateCoinCount);
+    };
   }, []);
 
   // Students, Grades & Ratings state
@@ -492,6 +506,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('smart_coins')}
+          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            activeSubTab === 'smart_coins'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md'
+              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+          }`}
+        >
+          <Coins className="w-4 h-4 text-amber-400" />
+          <span>🪙 SMART COIN</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-700 dark:text-amber-200 font-bold">
+            {totalCoinsCount} SC
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('homework')}
           className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
             activeSubTab === 'homework'
@@ -735,7 +764,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   {/* Bottom Stats & Actions */}
                   <div className="pt-3 border-t border-[#EBE7DF] dark:border-[#243326] flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 text-[11px]">
+                    <div className="flex items-center gap-2 flex-wrap text-[11px]">
                       <span className="text-[#828282] dark:text-[#9FB1A2]">
                         Baholar: <strong className="text-[#2C3E2D] dark:text-[#E6EAE7]">{stats.count} ta</strong>
                       </span>
@@ -744,6 +773,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           O'rtacha: {stats.avg} ball
                         </span>
                       )}
+                      <span className="text-amber-700 dark:text-amber-300 font-extrabold bg-amber-500/15 px-2.5 py-0.5 rounded-full">
+                        🪙 {getStudentCoinSummary(student.id, student.fullName).totalCoins} SC
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -767,6 +799,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       >
                         {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                         <span className="hidden sm:inline">{isCopied ? 'Nusxalandi' : 'Nusxalash'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setCoinTargetStudentId(student.id);
+                          setActiveSubTab('smart_coins');
+                        }}
+                        className="px-2.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-extrabold transition flex items-center gap-1 shadow-xs"
+                        title="O'quvchiga SMART COIN berish"
+                      >
+                        <Coins className="w-3.5 h-3.5" />
+                        <span>+Coin</span>
                       </button>
 
                       <button
@@ -1564,6 +1608,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             onSelectTrackLesson={onSelectStudentLesson}
           />
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: SMART COIN SYSTEM (USTOZ SMART COIN BERISH VA JURNALI) */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'smart_coins' && (
+        <SmartCoinCenter
+          mode="teacher"
+          teacherName={teacherName}
+          preselectedStudentId={coinTargetStudentId}
+        />
       )}
 
       {/* ========================================================================= */}

@@ -135,3 +135,19 @@ export const homeworkSubmissionsTable = pgTable('homework_submissions', {
   gradedAt: text('graded_at'),
 });
 
+export const smartCoinsTable = pgTable('smart_coins', {
+  id: text('id').primaryKey(),
+  studentId: text('student_id').notNull(),
+  studentName: text('student_name').notNull(),
+  studentLogin: text('student_login'),
+  studentGradeClass: text('student_grade_class'),
+  amount: integer('amount').notNull(),
+  category: text('category').notNull(),
+  reason: text('reason').notNull(),
+  track: text('track').default('general'),
+  lessonId: integer('lesson_id'),
+  teacherName: text('teacher_name').notNull(),
+  awardedAt: text('awarded_at').notNull(),
+});
+
+

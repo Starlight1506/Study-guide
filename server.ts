@@ -11,7 +11,8 @@ import {
   studentGradesTable, 
   lessonRatingsTable,
   homeworkAssignmentsTable,
-  homeworkSubmissionsTable
+  homeworkSubmissionsTable,
+  smartCoinsTable
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { eq, and, desc } from 'drizzle-orm';
@@ -534,6 +535,59 @@ ${lessonContext ? `Joriy dars mazmuni: ${lessonContext}` : ''}`;
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting homework submission:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // SMART COIN SYSTEM API (Cross-device persistence)
+  // Rule: "Koinlarni jazo sifatida qaytarib olmang" -> only positive coin awards
+  // ---------------------------------------------------------------------------
+  app.get('/api/smart-coins', async (_req, res) => {
+    try {
+      const records = await db
+        .select()
+        .from(smartCoinsTable)
+        .orderBy(desc(smartCoinsTable.awardedAt));
+      res.json({ coins: records });
+    } catch (error: any) {
+      console.error('Error fetching smart coins:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/smart-coins', async (req, res) => {
+    try {
+      const coin = req.body;
+      if (
+        !coin.id ||
+        !coin.studentId ||
+        !coin.studentName ||
+        typeof coin.amount !== 'number' ||
+        coin.amount <= 0 ||
+        !coin.reason ||
+        !coin.reason.trim()
+      ) {
+        return res.status(400).json({
+          error: "Har bir koinning aniq sababi bo'lishi va miqdori musbat bo'lishi shart! Koinlarni jazo sifatida qaytarib olish mumkin emas.",
+        });
+      }
+
+      const existing = await db
+        .select()
+        .from(smartCoinsTable)
+        .where(eq(smartCoinsTable.id, coin.id));
+      if (existing.length > 0) {
+        await db
+          .update(smartCoinsTable)
+          .set(coin)
+          .where(eq(smartCoinsTable.id, coin.id));
+      } else {
+        await db.insert(smartCoinsTable).values(coin);
+      }
+      res.json({ success: true, coin });
+    } catch (error: any) {
+      console.error('Error awarding smart coin:', error);
       res.status(500).json({ error: error.message });
     }
   });
