@@ -24,7 +24,6 @@ import LessonRatingFeedbackView from './LessonRatingFeedback';
 import { AppUser } from './LoginModal';
 
 interface DesignCourseViewProps {
-  onOpenAi: (lessonTitle?: string, context?: string) => void;
   completedLessons: number[];
   onToggleComplete: (id: number) => void;
   appUser?: AppUser | null;
@@ -32,7 +31,6 @@ interface DesignCourseViewProps {
 }
 
 export const DesignCourseView: React.FC<DesignCourseViewProps> = ({
-  onOpenAi,
   completedLessons,
   onToggleComplete,
   appUser,
@@ -423,19 +421,6 @@ export const DesignCourseView: React.FC<DesignCourseViewProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 self-end md:self-auto shrink-0">
-                <button
-                  onClick={() =>
-                    onOpenAi(
-                      `${isFrontendLesson ? 'Frontend' : 'Dizayn'} Darsi: ${selectedLesson.title}`,
-                      `Mavzu: ${selectedLesson.title}. Tushuncha: ${selectedLesson.theory.mainConcept}. Qoidalar: ${selectedLesson.theory.rules.join(', ')}. Amaliy vazifa: ${selectedLesson.practice.taskTitle}.`
-                    )
-                  }
-                  className="px-4 py-2 bg-[#2C3E2D] dark:bg-[#344E37] hover:bg-[#1C2C1D] text-white rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-                >
-                  <Bot className="w-3.5 h-3.5 text-[#8BA88E]" />
-                  AI Ustozdan So'rash
-                </button>
-
                 <button
                   onClick={() => onToggleComplete(selectedLesson.id)}
                   className={`px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${

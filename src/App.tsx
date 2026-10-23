@@ -52,7 +52,6 @@ import {
   Calendar
 } from 'lucide-react';
 import { exportLessonToPdf } from './utils/pdfExport.ts';
-import { AiAssistant } from './components/AiAssistant.tsx';
 import { LoginModal, AppUser } from './components/LoginModal.tsx';
 import { LoginPage } from './components/LoginPage.tsx';
 import { TrackSelectionModal, CourseTrack } from './components/TrackSelectionModal.tsx';
@@ -83,9 +82,8 @@ export default function App() {
   const [activeMonth, setActiveMonth] = useState<number>(1);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Search & AI Assistant States
+  // Search State
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
 
   // Age Group Explanation Mode: 'kichik' (1-4 sinf) | 'katta' (5-9 sinf) | 'both' (Yonma-yon solishtirish)
   const [explanationMode, setExplanationMode] = useState<'kichik' | 'katta' | 'both'>('kichik');
@@ -844,7 +842,6 @@ export default function App() {
         ) : currentTrack === 'design' ? (
           /* 2.3 TAB: DESIGN & FRONTEND COURSE VIEW (Canva, Figma, HTML5, CSS3) */
           <DesignCourseView
-            onOpenAi={(title, ctx) => setIsAiOpen(true)}
             completedLessons={designCompletedLessons}
             onToggleComplete={handleToggleDesignLesson}
             appUser={appUser}
@@ -1094,15 +1091,6 @@ export default function App() {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2 self-end md:self-auto">
-                              <button
-                                onClick={() => setIsAiOpen(true)}
-                                className="px-4 py-2.5 bg-[#2C3E2D] dark:bg-[#344E37] hover:bg-[#1C2C1D] text-white rounded-full text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
-                                title="AI Ustozdan ushbu dars bo'yicha savol so'rash"
-                              >
-                                <Bot className="w-4 h-4 text-[#8BA88E] shrink-0" />
-                                AI Ustoz
-                              </button>
-
                               <button
                                 onClick={handleDownloadPdf}
                                 disabled={exportingPdf}
@@ -1503,14 +1491,6 @@ export default function App() {
           </div>
         </div>
       </footer>
-
-      {/* AI ASSISTANT FLOATING WIDGET */}
-      <AiAssistant
-        currentLesson={getSelectedLesson()}
-        studentNotes={studentNotes}
-        isOpenExternal={isAiOpen}
-        onCloseExternal={() => setIsAiOpen(false)}
-      />
 
       {/* LOGIN MODAL (O'QUVCHI & O'QITUVCHI) */}
       <LoginModal

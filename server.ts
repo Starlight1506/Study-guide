@@ -44,47 +44,104 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
-  // POST AI Assistant Chat
+  // POST AI Assistant Chat (Socratic IT & Design Mentor with Strict Guardrails)
   app.post('/api/chat', async (req, res) => {
     try {
-      const { message, lessonTitle, lessonContext } = req.body;
+      const { message, history, courseName, lessonTitle, lessonContext, systemPromptConstraint } = req.body;
       if (!message || typeof message !== 'string') {
-        return res.status(400).json({ error: 'Message is required' });
+        return res.status(400).json({ error: 'Savol matni kiritilishi shart.' });
       }
 
       const ai = getGenAI();
       if (!ai) {
         return res.status(500).json({
-          error: 'Gemini API key is not configured.',
+          error: 'AI xizmati sozlanmagan (GEMINI_API_KEY topilmadi).',
         });
       }
 
-      const systemInstruction = `Siz IT Savodxonlik Portali uchun o'zbek tilida xizmat qiluvchi do'stona va bilimdon AI Yordamchisiz (IT Ustoz AI).
-Siz 1-9 sinf o'quvchilariga va barcha IT o'rganuvchilarga kompyuter savodxonligi, kiberxavfsizlik, dasturlash, apparat va dasturiy ta'minot, internet hamda sun'iy intellekt bo'yicha yordam berasiz.
+      const activeCourseLabel = courseName || "SMART HIGH SCHOOL IT, Grafik Dizayn (Canva/Figma) va Frontend (HTML5/CSS3) kurslari";
+      const activeTopicLabel = lessonTitle || activeCourseLabel;
 
-Javoblaringiz qoidalari:
-1. Sodda, qiziqarli va tushunarli o'zbek tilida yozing.
-2. Murakkab atamalarni hayotiy o'xshatishlar va amaliy misollar bilan tushuntiring.
-3. Kerak bo'lsa, qisqa va aniq ro'yxatlar hamda formatlashdan foydalaning.
-4. Agar o'quvchi ma'lum bir dars haqida so'rasa, shu dars doirasida va kontekstida javob bering va qisqa tavsiya bering.
+      const systemInstruction = `Sen SMART HIGH SCHOOL o'quv markazining "AI Ustoz" nomli intellektual, mehribon va talabchan Sokratik ustozisan.
+O'quvchi hozir o'rganayotgan kurs: ${activeCourseLabel}.
+Hozirgi tanlangan dars mavzusi: ${activeTopicLabel}.
+${lessonContext ? `Joriy dars mazmuni va qoidalari: ${lessonContext}` : ''}
 
-${lessonTitle ? `Joriy dars sarlavhasi: ${lessonTitle}` : ''}
-${lessonContext ? `Joriy dars mazmuni: ${lessonContext}` : ''}`;
+${systemPromptConstraint || ''}
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: message,
-        config: {
-          systemInstruction,
-        },
+SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ETILADI):
+
+1. FAQAT TANLANGAN DARS MAVZUSI BO'YICHA YORDAM BERISH (STRICT LESSON TOPIC CONSTRAINT):
+   - Sen FAQAT hozirgi tanlangan dars mavzusi («${activeTopicLabel}») doirasida yordam berasan.
+   - Agar o'quvchi tanlangan dars mavzusidan tashqari narsalar (o'yinlar, futbol, kino, siyosat, boshqa fanlar yoki hozirgi darsga aloqasi bo'lmagan mavzular) haqida so'rasa, muloyimlik bilan rad et:
+     "Kechirasan, aziz o'quvchim! Men hozir faqat tanlangan dars mavzusi («${activeTopicLabel}») bo'yicha yordam bera olaman. Keling, shu darsimizga qaytamiz!" deb, uni joriy dars mavzusiga qaytar.
+
+2. TAYYOR JAVOBNI BIRDANIGA AYTMASLIK (NO DIRECT ANSWERS):
+   - O'quvchi savol bersa yoki amaliy topshiriq / uyga vazifa so'rasa, HECH QACHON tayyor javobni yoki to'liq tayyor kodni birdaniga yozib berma!
+   - Maqsading — o'quvchining o'zi fikrlashi, harakat qilishi va javobni qadamma-qadam o'zi kashf qilishiga erishish.
+
+3. HAYOTIY MISOLLAR ORQALI TUSHUNTIRISH (REAL-WORLD ANALOGIES):
+   - Har bir tushunchani o'quvchi kundalik hayotda ko'radigan sodda va qiziqarli hayotiy o'xshatish (analogiya) bilan tushuntir.
+
+4. QADAMMA-QADAM KASHF QILISH TUZILISHI (STEP-BY-STEP DISCOVERY):
+   - 🌍 **Hayotiy misol:** Mavzuni 1-2 jumlada hayotiy o'xshatish bilan tushuntir.
+   - 💡 **Yo'naltiruvchi ip uchi (Hint):** To'liq javobni aytmasdan, yechim topish uchun kichik yo'nalish ber.
+   - 🤔 **Senga savol (O'ylab ko'r-chi):** Xabar oxirida o'quvchining o'zi o'ylab javob berishi uchun BITTA aniq yo'naltiruvchi savol ber.
+   - Agar o'quvchi avvalgi savolingga o'zi harakat qilib javob yozsa, avval uning harakatini samimiy maqta ("Barakalla, to'g'ri fikrlayapsan!"), xatosi bo'lsa yumshoq tushuntir va keyingi qadamga olib o't.
+
+5. USLUB VA HAJM:
+   - O'zbek tilida, sodda, ravon, ruhlantiruvchi ohangda yoz (maksimum 120-160 so'z).`;
+
+      // Build multi-turn contents from conversation history
+      const formattedContents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+      if (Array.isArray(history)) {
+        for (const item of history.slice(-10)) {
+          if (item && typeof item.text === 'string' && item.text.trim()) {
+            formattedContents.push({
+              role: item.sender === 'user' ? 'user' : 'model',
+              parts: [{ text: item.text }],
+            });
+          }
+        }
+      }
+      formattedContents.push({
+        role: 'user',
+        parts: [{ text: message }],
       });
 
-      const replyText = response.text || 'Kechirasiz, javob shakllantirishda xatolik yuz berdi.';
+      let replyText = '';
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: formattedContents,
+          config: {
+            systemInstruction,
+            temperature: 0.7,
+          },
+        });
+        replyText = response.text || '';
+      } catch (primaryErr: any) {
+        console.warn('gemini-3.8-flash fallback to gemini-flash-latest:', primaryErr?.message);
+        const fallbackResponse = await ai.models.generateContent({
+          model: 'gemini-flash-latest',
+          contents: formattedContents,
+          config: {
+            systemInstruction,
+            temperature: 0.7,
+          },
+        });
+        replyText = fallbackResponse.text || '';
+      }
+
+      if (!replyText) {
+        replyText = "Kechirasiz, javob shakllantirishda xatolik yuz berdi. Savolingizni boshqacharoq yozib ko'ring.";
+      }
+
       res.json({ reply: replyText });
     } catch (error: any) {
       console.error('Error in AI chat endpoint:', error);
       res.status(500).json({
-        error: 'AI assistant chat failed',
+        error: "AI Ustoz bilan bog'lanishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.",
         details: error.message,
       });
     }
