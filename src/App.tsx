@@ -49,7 +49,9 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Layers,
-  Calendar
+  Calendar,
+  Shield,
+  ChevronDown
 } from 'lucide-react';
 import { exportLessonToPdf } from './utils/pdfExport.ts';
 import { LoginModal, AppUser } from './components/LoginModal.tsx';
@@ -57,6 +59,7 @@ import { LoginPage } from './components/LoginPage.tsx';
 import { TrackSelectionModal, CourseTrack } from './components/TrackSelectionModal.tsx';
 import { DesignCourseView } from './components/DesignCourseView.tsx';
 import { TeacherDashboard } from './components/TeacherDashboard.tsx';
+import { AdminDashboard } from './components/AdminDashboard.tsx';
 import { ThemeToggle } from './components/ThemeToggle.tsx';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 import LessonRatingFeedbackView from './components/LessonRatingFeedback.tsx';
@@ -72,12 +75,13 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isTrackSelectionOpen, setIsTrackSelectionOpen] = useState<boolean>(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false);
+  const [rejaDropdownOpen, setRejaDropdownOpen] = useState<boolean>(false);
   const [currentTrack, setCurrentTrack] = useState<CourseTrack>('literacy'); // 'literacy' (Kompyuter savodxonligi) | 'design' (Grafik dizayn & Frontend)
   const [designCategory, setDesignCategory] = useState<'all' | 'design' | 'frontend'>('all');
   const [designCompletedLessons, setDesignCompletedLessons] = useState<number[]>([]);
 
   // Layout states
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'dashboard' | 'teacher_overview'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'dashboard' | 'teacher_overview' | 'admin_overview'>('curriculum');
   const [selectedLessonId, setSelectedLessonId] = useState<number | null>(1); // Default to Lesson 1
   const [activeMonth, setActiveMonth] = useState<number>(1);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -164,10 +168,13 @@ export default function App() {
     if (savedUser) {
       try {
         const parsed: AppUser = JSON.parse(savedUser);
-        if (parsed.role === 'teacher') {
-          parsed.name = 'Assadxoja';
-          parsed.email = 'Assadxoja';
-          parsed.uid = 'teacher_assadxoja';
+        if (parsed.role === 'admin') {
+          setAppUser(parsed);
+          setActiveTab('admin_overview');
+        } else if (parsed.role === 'teacher') {
+          if (!parsed.name) parsed.name = 'Assadxoja';
+          if (!parsed.email) parsed.email = 'Assadxoja';
+          if (!parsed.uid) parsed.uid = 'teacher_assadxoja';
           localStorage.setItem('it_portal_user', JSON.stringify(parsed));
           setAppUser(parsed);
           setActiveTab('teacher_overview');
@@ -206,7 +213,9 @@ export default function App() {
 
   const handleLoginSuccess = (user: AppUser) => {
     setAppUser(user);
-    if (user.role === 'teacher') {
+    if (user.role === 'admin') {
+      setActiveTab('admin_overview');
+    } else if (user.role === 'teacher') {
       setActiveTab('teacher_overview');
     } else {
       setActiveTab('curriculum');
@@ -488,12 +497,14 @@ export default function App() {
   return (
     <div id="app" className="min-h-screen flex flex-col bg-[#FDFBF7] dark:bg-[#0F1611] text-[#2D2D2D] dark:text-[#E6EAE7] transition-colors duration-200">
       
-      {/* 1. TOP HEADER NAVIGATION */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#141F16]/95 backdrop-blur-sm border-b border-[#EBE7DF] dark:border-[#243326] px-4 md:px-6 py-3.5 flex items-center justify-between shadow-sm">
+      {/* 1. COMPACT TOP HEADER NAVIGATION */}
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#141F16]/95 backdrop-blur-sm border-b border-[#EBE7DF] dark:border-[#243326] px-4 md:px-6 py-2.5 flex items-center justify-between shadow-xs">
         <div 
           className="flex items-center gap-2.5 cursor-pointer" 
           onClick={() => {
-            if (appUser?.role === 'teacher') {
+            if (appUser?.role === 'admin') {
+              setActiveTab('admin_overview');
+            } else if (appUser?.role === 'teacher') {
               setActiveTab('teacher_overview');
             } else {
               setSelectedLessonId(1);
@@ -504,185 +515,208 @@ export default function App() {
           <img
             src="/pwa-192x192.png"
             alt="SMART HIGH SCHOOL Logo"
-            className="w-10 h-10 rounded-full object-cover shadow-md border-2 border-[#8BA88E]/40"
+            className="w-9 h-9 rounded-full object-cover shadow-sm border border-[#8BA88E]/40"
           />
           <div>
-            <h1 className="text-lg md:text-xl font-serif italic text-[#1A2E1C] dark:text-[#E6EAE7] tracking-tight">SMART HIGH SCHOOL</h1>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[#8BA88E] font-bold tracking-wider uppercase">
-                {appUser?.role === 'teacher' 
-                  ? "O'qituvchi Markazi" 
+            <h1 className="text-base md:text-lg font-serif italic text-[#1A2E1C] dark:text-[#E6EAE7] tracking-tight leading-tight">SMART HIGH SCHOOL</h1>
+            <span className="text-[9px] text-[#8BA88E] font-bold tracking-wider uppercase block">
+              {appUser?.role === 'admin'
+                ? "🛡️ Bosh Admin Paneli"
+                : appUser?.role === 'teacher' 
+                  ? "👨‍🏫 O'qituvchi Markazi" 
                   : currentTrack === 'design' 
                     ? designCategory === 'frontend'
-                      ? "💻 Frontend Dasturlash (HTML5 & CSS3)"
-                      : "🎨 Grafik Dizayn & Frontend Bo'limi" 
-                    : "💻 Kompyuter Savodxonligi (36 dars)"}
-              </span>
-            </div>
+                      ? "💻 Frontend (HTML5 & CSS3)"
+                      : "🎨 Grafik Dizayn & Frontend" 
+                    : "💻 Kompyuter Savodxonligi"}
+            </span>
           </div>
         </div>
 
-        {/* Middle Navigation / Track Switcher */}
+        {/* Middle Navigation / Compact Reja Switcher */}
         <div className="hidden lg:flex items-center gap-2">
-          {appUser?.role === 'teacher' ? (
-            /* TEACHER NAVIGATION */
-            <div className="flex items-center gap-1.5 bg-[#F5F5F0] dark:bg-[#1A261D] p-1 rounded-xl border border-[#EBE7DF] dark:border-[#283A2C]">
+          <div className="flex items-center gap-1 bg-[#F5F5F0] dark:bg-[#1A261D] p-1 rounded-xl border border-[#EBE7DF] dark:border-[#283A2C]">
+            {appUser?.role === 'admin' && (
+              <button
+                onClick={() => setActiveTab('admin_overview')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === 'admin_overview'
+                    ? 'bg-amber-500 text-[#1C2C1D] shadow-xs'
+                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                🛡️ Admin Panel
+              </button>
+            )}
+
+            {(appUser?.role === 'teacher' || appUser?.role === 'admin') && (
               <button
                 onClick={() => setActiveTab('teacher_overview')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
                   activeTab === 'teacher_overview'
-                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
+                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-xs'
                     : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                🏢 Kabinet
+                🏢 Ustoz Kabineti
               </button>
-              <button
-                onClick={() => { setCurrentTrack('literacy'); setActiveTab('curriculum'); }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  activeTab === 'curriculum' && currentTrack === 'literacy'
-                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
-                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                💻 Savodxonlik
-              </button>
-              <button
-                onClick={() => { setCurrentTrack('design'); setDesignCategory('design'); setActiveTab('curriculum'); }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  activeTab === 'curriculum' && currentTrack === 'design' && designCategory !== 'frontend'
-                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
-                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-                }`}
-              >
-                <Palette className="w-3.5 h-3.5" />
-                🎨 Dizayn (Canva/Figma)
-              </button>
-              <button
-                onClick={() => { setCurrentTrack('design'); setDesignCategory('frontend'); setActiveTab('curriculum'); }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  activeTab === 'curriculum' && currentTrack === 'design' && designCategory === 'frontend'
-                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
-                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                🌐 Frontend (HTML/CSS)
-              </button>
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  activeTab === 'dashboard'
-                    ? 'bg-white dark:bg-[#203023] text-[#2D2D2D] dark:text-[#E6EAE7] border border-[#EBE7DF] dark:border-[#2F4433] shadow-sm'
-                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-                }`}
-              >
-                <Trophy className="w-3.5 h-3.5 text-[#8BA88E]" />
-                📊 Baholar
-              </button>
-            </div>
-          ) : (
-            /* STUDENT NAVIGATION WITH TRACK SWITCHER */
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-[#F5F5F0] dark:bg-[#1A261D] p-1 rounded-xl border border-[#EBE7DF] dark:border-[#283A2C]">
-                <button
-                  onClick={() => setActiveTab('curriculum')}
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === 'curriculum'
-                      ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-sm'
-                      : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-                  }`}
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  {currentTrack === 'design' ? '🎨 Dizayn Darslari' : '📚 36 ta Darslik'}
-                </button>
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === 'dashboard'
-                      ? 'bg-white dark:bg-[#203023] text-[#2D2D2D] dark:text-[#E6EAE7] border border-[#EBE7DF] dark:border-[#2F4433] shadow-sm'
-                      : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-                  }`}
-                >
-                  <Trophy className="w-3.5 h-3.5 text-[#8BA88E]" />
-                  📊 Kabinet & Natijalar
-                </button>
-              </div>
+            )}
 
-              {/* Student Track Switcher Button */}
+            {appUser?.role === 'student' && (
               <button
-                onClick={() => setIsTrackSelectionOpen(true)}
-                className="px-3 py-1.5 bg-[#FAF8F5] dark:bg-[#19241C] hover:bg-[#F5F5F0] dark:hover:bg-[#223326] border border-[#8BA88E]/40 dark:border-[#8BA88E]/30 text-[#2C3E2D] dark:text-[#CBE0CE] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                title="Boshqa kurs yoki bo'limga o'tish"
+                onClick={() => setActiveTab('curriculum')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  activeTab === 'curriculum'
+                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-xs'
+                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+                }`}
               >
-                <RefreshCw className="w-3.5 h-3.5 text-[#8BA88E]" />
-                <span>Bo'limni Almashtirish</span>
+                <BookOpen className="w-3.5 h-3.5" />
+                {currentTrack === 'design' ? '🎨 Darsliklar' : '📚 Darsliklar'}
               </button>
+            )}
+
+            {/* Unified "📋 Reja" Dropdown (All Lesson Plans + Schedule) */}
+            <div className="relative">
+              <button
+                onClick={() => setRejaDropdownOpen((prev) => !prev)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  rejaDropdownOpen || (activeTab === 'curriculum' && appUser?.role !== 'student')
+                    ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white shadow-xs'
+                    : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <span>📋 Reja</span>
+                <ChevronDown className="w-3 h-3 opacity-75" />
+              </button>
+
+              {rejaDropdownOpen && (
+                <div
+                  onMouseLeave={() => setRejaDropdownOpen(false)}
+                  className="absolute top-full left-0 mt-1.5 w-64 bg-white dark:bg-[#152017] rounded-2xl shadow-xl border border-[#EBE7DF] dark:border-[#283A2C] p-2 z-50 flex flex-col gap-1"
+                >
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#828282] dark:text-[#9FB1A2]">
+                    Birlashgan Dars Rejalari & Jadval
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCurrentTrack('literacy');
+                      setActiveTab('curriculum');
+                      setRejaDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold hover:bg-[#FAF8F5] dark:hover:bg-[#1E2D20] text-[#1A2E1C] dark:text-[#E6EAE7] flex items-center justify-between"
+                  >
+                    <span>💻 Kompyuter Savodxonligi</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#2C3E2D]/10 dark:bg-white/10 text-[#2C3E2D] dark:text-[#8BA88E]">36 dars</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCurrentTrack('design');
+                      setDesignCategory('design');
+                      setActiveTab('curriculum');
+                      setRejaDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold hover:bg-[#FAF8F5] dark:hover:bg-[#1E2D20] text-[#1A2E1C] dark:text-[#E6EAE7] flex items-center justify-between"
+                  >
+                    <span>🎨 Grafik Dizayn (Canva/Figma)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300">24 dars</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCurrentTrack('design');
+                      setDesignCategory('frontend');
+                      setActiveTab('curriculum');
+                      setRejaDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold hover:bg-[#FAF8F5] dark:hover:bg-[#1E2D20] text-[#1A2E1C] dark:text-[#E6EAE7] flex items-center justify-between"
+                  >
+                    <span>🌐 Frontend (HTML5/CSS3)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300">24 dars</span>
+                  </button>
+                  <div className="border-t border-[#EBE7DF] dark:border-[#243326] my-1" />
+                  <button
+                    onClick={() => {
+                      setIsScheduleModalOpen(true);
+                      setRejaDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-between"
+                  >
+                    <span>📅 Dars Jadvali & SMS Kalendar</span>
+                    <span className="text-[10px] font-bold">3 Guruh</span>
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'dashboard'
+                  ? 'bg-white dark:bg-[#203023] text-[#2D2D2D] dark:text-[#E6EAE7] border border-[#EBE7DF] dark:border-[#2F4433] shadow-xs'
+                  : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-[#8BA88E]" />
+              📊 {appUser?.role === 'student' ? 'Kabinet & Natijalar' : 'Baholar'}
+            </button>
+          </div>
         </div>
 
         {/* User Auth controls & Theme Switcher */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Quick Schedule Calendar Modal Trigger */}
-          <button
-            onClick={() => setIsScheduleModalOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-[#FAF8F5] dark:bg-[#1C281F] border border-[#8BA88E]/40 dark:border-[#8BA88E]/30 hover:bg-[#F5F5F0] dark:hover:bg-[#253528] text-xs font-bold text-[#2C3E2D] dark:text-[#E6EAE7] transition flex items-center gap-1.5 shadow-xs"
-            title="Dars kunlari va soatlari kalendari"
-          >
-            <Calendar className="w-3.5 h-3.5 text-[#8BA88E]" />
-            <span className="hidden sm:inline">Dars Jadvali</span>
-          </button>
-
-          {/* In-App PWA Install Button */}
+        <div className="flex items-center gap-2">
           <PWAInstallButton />
-
-          {/* Global Dark Mode Switcher */}
           <ThemeToggle />
 
           {authLoading && !appUser ? (
             <div className="w-6 h-6 border-2 border-[#8BA88E] border-t-transparent rounded-full animate-spin" />
           ) : appUser ? (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <div className="hidden sm:flex flex-col text-right">
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-[140px]">{appUser.name}</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-[130px] leading-tight">{appUser.name}</p>
                 <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full w-max ml-auto ${
-                  appUser.role === 'teacher' ? 'bg-[#2C3E2D] text-white' : 'bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#8BA88E]'
+                  appUser.role === 'admin'
+                    ? 'bg-amber-500 text-[#1C2C1D]'
+                    : appUser.role === 'teacher'
+                    ? 'bg-[#2C3E2D] text-white'
+                    : 'bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#8BA88E]'
                 }`}>
-                  {appUser.role === 'teacher' ? "👨‍🏫 O'qituvchi" : "👨‍🎓 O'quvchi"}
+                  {appUser.role === 'admin' ? "🛡️ Admin" : appUser.role === 'teacher' ? "👨‍🏫 O'qituvchi" : "👨‍🎓 O'quvchi"}
                 </span>
               </div>
               {appUser.photoURL ? (
-                <img referrerPolicy="no-referrer" src={appUser.photoURL} alt="Avatar" className="w-8.5 h-8.5 rounded-full border border-slate-200 dark:border-slate-700" />
+                <img referrerPolicy="no-referrer" src={appUser.photoURL} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" />
               ) : (
-                <div className="w-8.5 h-8.5 rounded-full bg-[#2C3E2D] dark:bg-[#38513B] text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                  {appUser.role === 'teacher' ? 'U' : 'O'}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-xs ${
+                  appUser.role === 'admin' ? 'bg-amber-500 text-[#1C2C1D]' : 'bg-[#2C3E2D] dark:bg-[#38513B] text-white'
+                }`}>
+                  {appUser.role === 'admin' ? 'A' : appUser.role === 'teacher' ? 'U' : 'O'}
                 </div>
               )}
               <button
                 onClick={handleLogout}
                 title="Tizimdan chiqish"
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#1E2D20] rounded-lg transition"
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#1E2D20] rounded-lg transition"
               >
-                <LogOut className="w-4.5 h-4.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button
               onClick={() => setIsLoginModalOpen(true)}
-              className="px-4 py-2 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5"
+              className="px-3.5 py-1.5 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5"
             >
               <LogIn className="w-3.5 h-3.5" />
-              Kirish (O'quvchi / O'qituvchi)
+              Kirish
             </button>
           )}
 
           {/* Mobile menu trigger */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1F2C21] rounded-lg transition"
+            className="lg:hidden p-1.5 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1F2C21] rounded-lg transition"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -696,121 +730,78 @@ export default function App() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="lg:hidden bg-white dark:bg-[#141F16] border-b border-[#EBE7DF] dark:border-[#243326] px-6 py-4 flex flex-col gap-2 shadow-sm"
+            className="lg:hidden bg-white dark:bg-[#141F16] border-b border-[#EBE7DF] dark:border-[#243326] px-5 py-3.5 flex flex-col gap-1.5 shadow-sm"
           >
-            {/* Mobile Theme Toggle */}
-            <div className="flex items-center justify-between py-2 px-1 mb-2 border-b border-[#EBE7DF] dark:border-[#243326]">
-              <span className="text-xs font-bold text-[#828282] dark:text-[#9FB1A2]">Mavzu tanlash:</span>
-              <ThemeToggle showLabel={true} />
-            </div>
-
-            {appUser?.role === 'teacher' ? (
-              <>
-                <button
-                  onClick={() => { setActiveTab('teacher_overview'); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                    activeTab === 'teacher_overview' ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]'
-                  }`}
-                >
-                  🏢 Barcha Kurslar Boshqaruvi
-                </button>
-                <button
-                  onClick={() => { setCurrentTrack('literacy'); setActiveTab('curriculum'); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                    activeTab === 'curriculum' && currentTrack === 'literacy' ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]'
-                  }`}
-                >
-                  💻 Kompyuter Savodxonligi (36 dars)
-                </button>
-                <button
-                  onClick={() => { setCurrentTrack('design'); setActiveTab('curriculum'); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                    activeTab === 'curriculum' && currentTrack === 'design' ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]'
-                  }`}
-                >
-                  🎨 Grafik Dizayn Kursi
-                </button>
-                <button
-                  onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                    activeTab === 'dashboard' ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]'
-                  }`}
-                >
-                  📊 O'quvchilar Monitoringi
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => { setActiveTab('curriculum'); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                    activeTab === 'curriculum' ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]'
-                  }`}
-                >
-                  {currentTrack === 'design' ? '🎨 Dizayn Darslari' : '📚 36 ta Darslik IT Dasturi'}
-                </button>
-                <button
-                  onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                    activeTab === 'dashboard' ? 'bg-[#2C3E2D] dark:bg-[#344E37] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]'
-                  }`}
-                >
-                  📊 O'quvchi Kabineti & Natijalar
-                </button>
-                <button
-                  onClick={() => { setIsTrackSelectionOpen(true); setMobileMenuOpen(false); }}
-                  className="w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg bg-[#FAF8F5] dark:bg-[#1C281F] text-[#2C3E2D] dark:text-[#D4DFD6] border border-[#8BA88E]/40 dark:border-[#8BA88E]/30 hover:bg-[#F5F5F0] dark:hover:bg-[#253528] flex items-center justify-between"
-                >
-                  <span>🔄 Bo'limni Almashtirish</span>
-                  <span className="text-[10px] bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#8BA88E] px-2 py-0.5 rounded-full font-bold">
-                    {currentTrack === 'design' ? 'Dizayn' : 'Savodxonlik'}
-                  </span>
-                </button>
-                <button
-                  onClick={() => { setIsScheduleModalOpen(true); setMobileMenuOpen(false); }}
-                  className="w-full text-left px-4 py-2.5 text-xs font-bold rounded-lg transition-all text-[#2C3E2D] dark:text-[#E6EAE7] bg-[#FAF8F5] dark:bg-[#1C281F] border border-[#8BA88E]/30 hover:bg-[#F5F5F0] dark:hover:bg-[#253528] flex items-center justify-between"
-                >
-                  <span className="flex items-center gap-2">
-                    <Calendar className="w-3.5 h-3.5 text-[#8BA88E]" />
-                    <span>📅 Dars Jadvali & Kalendar</span>
-                  </span>
-                  <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                    3 Guruh
-                  </span>
-                </button>
-              </>
+            {appUser?.role === 'admin' && (
+              <button
+                onClick={() => { setActiveTab('admin_overview'); setMobileMenuOpen(false); }}
+                className={`w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'admin_overview' ? 'bg-amber-500 text-[#1C2C1D]' : 'text-[#2D2D2D] dark:text-[#E6EAE7]'
+                }`}
+              >
+                🛡️ Bosh Admin Paneli
+              </button>
             )}
+            {(appUser?.role === 'teacher' || appUser?.role === 'admin') && (
+              <button
+                onClick={() => { setActiveTab('teacher_overview'); setMobileMenuOpen(false); }}
+                className={`w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'teacher_overview' ? 'bg-[#2C3E2D] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7]'
+                }`}
+              >
+                🏢 Ustoz Kabineti
+              </button>
+            )}
+            <button
+              onClick={() => { setCurrentTrack('literacy'); setActiveTab('curriculum'); setMobileMenuOpen(false); }}
+              className="w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]"
+            >
+              📋 Reja: Kompyuter Savodxonligi (36 dars)
+            </button>
+            <button
+              onClick={() => { setCurrentTrack('design'); setDesignCategory('design'); setActiveTab('curriculum'); setMobileMenuOpen(false); }}
+              className="w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]"
+            >
+              📋 Reja: Grafik Dizayn (Canva & Figma)
+            </button>
+            <button
+              onClick={() => { setCurrentTrack('design'); setDesignCategory('frontend'); setActiveTab('curriculum'); setMobileMenuOpen(false); }}
+              className="w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg text-[#2D2D2D] dark:text-[#E6EAE7] hover:bg-[#F5F5F0] dark:hover:bg-[#1E2D20]"
+            >
+              📋 Reja: Frontend (HTML5 & CSS3)
+            </button>
+            <button
+              onClick={() => { setIsScheduleModalOpen(true); setMobileMenuOpen(false); }}
+              className="w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"
+            >
+              📅 Reja: Dars Jadvali & 30-daqiqalik SMS
+            </button>
+            <button
+              onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
+              className={`w-full text-left px-3.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'dashboard' ? 'bg-[#2C3E2D] text-white' : 'text-[#2D2D2D] dark:text-[#E6EAE7]'
+              }`}
+            >
+              📊 Kabinet & Baholar
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* 2. MAIN WORKSPACE */}
-      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-6">
 
-        {/* GUEST BANNER */}
-        {!appUser && (
-          <div className="mb-6 bg-[#F5F5F0] dark:bg-[#152017] border border-[#EBE7DF] dark:border-[#243326] rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-            <div className="flex items-start gap-3">
-              <HelpCircle className="w-5 h-5 text-[#8BA88E] shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-bold text-[#2C3E2D] dark:text-[#E6EAE7] font-serif italic text-base">Tizimga kirmasdan foydalanmoqdasiz</h4>
-                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-0.5 leading-relaxed">
-                  O'quvchi yoki O'qituvchi akkauntingizga kirib, kurslarni tanlashingiz, darslarni o'zlashtirishingiz va natijalarni saqlab borishingiz mumkin!
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsLoginModalOpen(true)}
-              className="px-6 py-2.5 bg-[#2C3E2D] dark:bg-[#344E37] hover:bg-[#1C2C1D] text-white font-bold text-xs rounded-full shadow-sm transition-all shrink-0 flex items-center gap-1.5"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Akkauntga Kirish</span>
-            </button>
-          </div>
-        )}
-
-        {/* 2.1 TAB: TEACHER OVERVIEW (Barcha Kurslar) */}
-        {activeTab === 'teacher_overview' ? (
+        {/* 2.0 TAB: ADMIN OVERVIEW */}
+        {activeTab === 'admin_overview' ? (
+          <AdminDashboard
+            adminName={appUser?.name || 'Bosh Admin'}
+            onNavigateToTrack={(track) => {
+              setCurrentTrack(track);
+              setActiveTab('curriculum');
+            }}
+          />
+        ) : activeTab === 'teacher_overview' ? (
+          /* 2.1 TAB: TEACHER OVERVIEW */
           <TeacherDashboard
             onNavigateToTrack={(track) => {
               setCurrentTrack(track);

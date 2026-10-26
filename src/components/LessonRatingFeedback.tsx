@@ -262,46 +262,24 @@ export default function LessonRatingFeedbackView({
         )}
       </AnimatePresence>
 
-      {/* STUDENT IDENTITY SELECTION */}
+      {/* ANONYMOUS PRIVACY GUARANTEE BANNER */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#FAF8F5] dark:bg-[#162119] border border-[#EBE7DF] dark:border-[#253528]">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#2C3E2D]/10 dark:bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#8BA88E] flex items-center justify-center font-bold text-xs">
-            {activeStudent ? activeStudent.fullName.charAt(0) : '👤'}
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">
+            🔒
           </div>
           <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-[#828282] dark:text-[#9FB1A2] block">
-              Fikr bildiruvchi o'quvchi:
+            <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-700 dark:text-emerald-400 block">
+              100% Anonim Baholash Tizimi
             </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
-                {activeStudent ? activeStudent.fullName : customStudentName || "Mehmon O'quvchi"}
-              </span>
-              {activeStudent && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#A7C2AA]">
-                  {activeStudent.gradeClass}
-                </span>
-              )}
-            </div>
+            <p className="text-xs text-[#2D2D2D] dark:text-[#E6EAE7]">
+              Sizning ismingiz yashiriladi — kim baho qo'ygani o'qituvchiga ham, boshqalarga ham ko'rinmaydi.
+            </p>
           </div>
         </div>
-
-        {/* Allow quick switch if teacher or demo or multiple students */}
-        {(!appUser || appUser.role === 'teacher') && studentsList.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#828282] dark:text-[#9FB1A2]">O'quvchini tanlash:</span>
-            <select
-              value={activeStudent?.id || ''}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-[#1D2B20] border border-[#EBE7DF] dark:border-[#2F4433] text-[#2D2D2D] dark:text-[#E6EAE7] focus:outline-none focus:border-[#8BA88E] font-medium"
-            >
-              {studentsList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.fullName} ({s.gradeClass})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+          Maxfiylik kafolatlangan
+        </span>
       </div>
 
       {/* EXISTING SUBMITTED REVIEW CARD (VIEW MODE) */}
@@ -483,16 +461,11 @@ export default function LessonRatingFeedbackView({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-xl bg-[#2C3E2D]/10 dark:bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#8BA88E] flex items-center justify-center font-bold text-xs">
-                        {rev.studentName.charAt(0)}
+                        🔒
                       </div>
                       <span className="text-xs font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
-                        {rev.studentName}
+                        Anonim O'quvchi
                       </span>
-                      {rev.studentGradeClass && (
-                        <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2]">
-                          ({rev.studentGradeClass})
-                        </span>
-                      )}
                     </div>
 
                     <div className="flex items-center text-amber-400">

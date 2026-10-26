@@ -89,8 +89,8 @@ export const SCHEDULE_GROUPS: StudentScheduleGroup[] = [
     endMinute: 0,
     days: [1, 2, 0], // Dushanba (1), Seshanba (2), Yakshanba (0)
     dayNames: ["Dushanba", "Seshanba", "Yakshanba"],
-    studentNames: ["Sunnatilla", "Baxodir", "Dovud", "Fozilaxmad"],
-    studentLogins: ["sunnatilla", "baxodir", "dovud", "fozilaxmad"],
+    studentNames: ["Sultonxon", "Baxodir", "Dovud", "Fozilaxmad"],
+    studentLogins: ["sultonxon", "baxodir", "dovud", "fozilaxmad"],
     room: "Grafik Dizayn & Multimedia Lab (2-Xona)",
     subject: "Grafik Dizayn & Vizual Ijodkorlik",
     themeColor: {
@@ -113,8 +113,8 @@ export const SCHEDULE_GROUPS: StudentScheduleGroup[] = [
     endMinute: 0,
     days: [1, 2, 0], // Dushanba (1), Seshanba (2), Yakshanba (0)
     dayNames: ["Dushanba", "Seshanba", "Yakshanba"],
-    studentNames: ["Dilmurod", "Nafosat", "Abdulaziz"],
-    studentLogins: ["dilmurod", "nafosat", "abdulaziz"],
+    studentNames: ["Dilmurod", "Nafosat", "Abdulaziz", "Sunnatilla"],
+    studentLogins: ["dilmurod", "nafosat", "abdulaziz", "sunnatilla"],
     room: "IT Amaliyot Zali (3-Xona)",
     subject: "Frontend & IT Savodxonlik Amaliyoti",
     themeColor: {

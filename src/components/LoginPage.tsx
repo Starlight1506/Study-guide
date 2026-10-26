@@ -24,6 +24,8 @@ import {
   authenticateStudent, 
   getStoredStudents, 
   authenticateTeacher, 
+  authenticateAdmin,
+  ADMIN_CREDENTIALS,
   TEACHER_CREDENTIALS 
 } from '../services/studentManager';
 
@@ -65,17 +67,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
+    // Check if Admin login
+    if (selectedRole === 'admin') {
+      if (!authenticateAdmin(cleanInput, cleanPass)) {
+        setError("Admin logini yoki paroli noto'g'ri! (Standart login: admin | parol: Admin@2026#)");
+        return;
+      }
+      const user: AppUser = {
+        uid: 'admin_main',
+        name: ADMIN_CREDENTIALS.name,
+        email: cleanInput,
+        role: 'admin',
+        selectedTrack: null,
+      };
+      localStorage.setItem('it_portal_user', JSON.stringify(user));
+      onLoginSuccess(user);
+      return;
+    }
+
     // Check if Teacher login
     if (selectedRole === 'teacher') {
-      if (!authenticateTeacher(cleanInput, cleanPass)) {
-        setError('O\'qituvchi logini yoki paroli noto\'g\'ri! Faqat ruxsat etilgan o\'qituvchi akkaunti orqali kirish mumkin.');
+      const matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      if (!matchedTeacher) {
+        setError('O\'qituvchi logini yoki paroli noto\'g\'ri! Admin bergan o\'qituvchi login va parolini kiriting.');
         return;
       }
 
       const user: AppUser = {
-        uid: 'teacher_assadxoja',
-        name: TEACHER_CREDENTIALS.name,
-        email: TEACHER_CREDENTIALS.login,
+        uid: matchedTeacher.id,
+        name: matchedTeacher.fullName,
+        email: matchedTeacher.login,
         role: 'teacher',
         selectedTrack: null,
       };
@@ -191,30 +212,42 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <label className="text-[11px] font-bold text-[#828282] dark:text-[#8FA592] uppercase tracking-wider block mb-2 text-center">
               Kim sifatida kirmoqchisiz?
             </label>
-            <div className="grid grid-cols-2 gap-2 bg-[#F5F5F0] dark:bg-[#111A13] p-1 rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
+            <div className="grid grid-cols-3 gap-1.5 bg-[#F5F5F0] dark:bg-[#111A13] p-1 rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
               <button
                 type="button"
                 onClick={() => { setSelectedRole('student'); setError(''); }}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                   selectedRole === 'student'
                     ? 'bg-[#2C3E2D] dark:bg-[#2E4231] text-white shadow-md'
                     : 'text-[#828282] dark:text-[#8FA592] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
-                <GraduationCap className="w-4 h-4" />
-                👨‍🎓 O'quvchi
+                <GraduationCap className="w-3.5 h-3.5" />
+                O'quvchi
               </button>
               <button
                 type="button"
-                onClick={() => { setSelectedRole('teacher'); setError(''); }}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                onClick={() => { setSelectedRole('teacher'); setIsRegistering(false); setError(''); }}
+                className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                   selectedRole === 'teacher'
                     ? 'bg-[#2C3E2D] dark:bg-[#2E4231] text-white shadow-md'
                     : 'text-[#828282] dark:text-[#8FA592] hover:text-[#2D2D2D] dark:hover:text-white'
                 }`}
               >
-                <UserCheck className="w-4 h-4" />
-                👨‍🏫 O'qituvchi
+                <UserCheck className="w-3.5 h-3.5" />
+                O'qituvchi
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSelectedRole('admin'); setIsRegistering(false); setError(''); }}
+                className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  selectedRole === 'admin'
+                    ? 'bg-[#2C3E2D] dark:bg-[#2E4231] text-white shadow-md'
+                    : 'text-[#828282] dark:text-[#8FA592] hover:text-[#2D2D2D] dark:hover:text-white'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                Admin
               </button>
             </div>
 
@@ -225,10 +258,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <KeyRound className="w-4 h-4 text-[#8BA88E] shrink-0" />
                   <span><strong>O'quvchi:</strong> O'qituvchi bergan login va parol orqali kiring va baholaringizni ko'ring.</span>
                 </>
-              ) : (
+              ) : selectedRole === 'teacher' ? (
                 <>
                   <Palette className="w-4 h-4 text-[#8BA88E] shrink-0" />
-                  <span><strong>O'qituvchi:</strong> O'quvchilarga login/parol bering va har dars bo'yicha ball qo'ying.</span>
+                  <span><strong>O'qituvchi:</strong> Admin bergan login/parol orqali kiring va har dars bo'yicha ball qo'ying.</span>
+                </>
+              ) : (
+                <>
+                  <Shield className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span>
+                    <strong>Admin:</strong> O'qituvchi login/parolini boshqarish va anonim baholarni ko'rish (Login: <code className="font-mono font-bold">admin</code> | Parol: <code className="font-mono font-bold">Admin@2026#</code>).
+                  </span>
                 </>
               )}
             </div>

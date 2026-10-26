@@ -19,7 +19,12 @@ import {
   KeyRound,
   ShieldCheck,
   UserCheck,
-  Coins
+  Coins,
+  Phone,
+  BellRing,
+  Palette,
+  Code2,
+  Check
 } from 'lucide-react';
 import { UNIFIED_CURRICULUM, Lesson } from '../data/curriculum';
 import { DESIGN_CURRICULUM } from '../data/designCurriculum';
@@ -30,7 +35,8 @@ import {
   getGradesForStudent, 
   getStudentByLoginOrId, 
   calculateStudentProfile,
-  getStudentRank
+  getStudentRank,
+  updateStudent
 } from '../services/studentManager';
 import StudentProfileView from './StudentProfileView';
 import StudentLeaderboard from './StudentLeaderboard';
@@ -82,9 +88,12 @@ export default function StudentDashboard({
   onSelectLesson, 
   onSelectTrackLesson 
 }: DashboardProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'teacher_grades' | 'smart_coins' | 'homework' | 'leaderboard' | 'lessons' | 'games' | 'schedule'>('teacher_grades');
+  const [activeSubTab, setActiveSubTab] = useState<'teacher_grades' | 'smart_coins' | 'homework' | 'leaderboard' | 'reja' | 'games'>('teacher_grades');
+  const [rejaSubView, setRejaSubView] = useState<'schedule' | 'completed' | 'all_plans'>('schedule');
   const [myHomeworksCount, setMyHomeworksCount] = useState<number>(0);
   const [myCoinBalance, setMyCoinBalance] = useState<number>(0);
+  const [phoneInput, setPhoneInput] = useState<string>('');
+  const [phoneSavedMsg, setPhoneSavedMsg] = useState<boolean>(false);
 
   useEffect(() => {
     const updateHw = () => {
@@ -145,6 +154,16 @@ export default function StudentDashboard({
     };
   }, [appUser]);
 
+  useEffect(() => {
+    setPhoneInput(currentStudent.phone || '');
+  }, [currentStudent]);
+
+  const handleSaveStudentPhone = () => {
+    if (!currentStudent.id || currentStudent.id === 'std_guest') return;
+    updateStudent(currentStudent.id, { phone: phoneInput.trim() });
+    setPhoneSavedMsg(true);
+    setTimeout(() => setPhoneSavedMsg(false), 3000);
+  };
 
   // Load teacher grades for this student
   const loadGrades = () => {
@@ -236,236 +255,206 @@ export default function StudentDashboard({
   }, [currentStudent, grades]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       
-      {/* Top Banner / Student Identity Profile */}
-      <div className="bg-[#2C3E2D] text-white rounded-3xl p-6 md:p-8 shadow-lg border border-[#8BA88E]/30 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+      {/* Compact Top Banner / Student Identity Profile */}
+      <div className="bg-[#2C3E2D] text-white rounded-3xl p-5 md:p-6 shadow-md border border-[#8BA88E]/30 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-52 h-52 bg-white/5 rounded-full blur-3xl -mr-12 -mt-12 pointer-events-none" />
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#8BA88E] text-white flex items-center justify-center font-serif italic text-2xl font-bold shadow-md shrink-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+          <div className="flex items-center gap-3.5">
+            <div className="w-13 h-13 rounded-2xl bg-[#8BA88E] text-white flex items-center justify-center font-serif italic text-xl font-bold shadow-md shrink-0">
               {appUser?.name ? appUser.name.charAt(0) : 'O'}
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-[#8BA88E] text-[10px] font-bold uppercase tracking-wider">
-                  👨‍🎓 O'quvchi Kabineti
+              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                <span className="px-2 py-0.5 rounded-full bg-white/15 text-[#8BA88E] text-[9px] font-bold uppercase tracking-wider">
+                  👨‍🎓 O'quvchi
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white/90 text-[10px] font-bold">
-                  {appUser?.email ? `Login: ${appUser.email}` : "Ro'yxatdan o'tgan"}
+                <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/90 text-[9px] font-bold">
+                  {appUser?.email ? `Login: ${appUser.email}` : "Faol"}
                 </span>
                 {studentNextLesson && (
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] font-bold border border-emerald-400/40">
-                    {studentNextLesson.group.name}
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 text-[9px] font-bold border border-emerald-400/40">
+                    {studentNextLesson.group.shortName}
                   </span>
                 )}
               </div>
-              <h3 className="text-2xl font-serif italic font-bold">
+              <h3 className="text-xl font-serif italic font-bold leading-tight">
                 {appUser?.name || "O'quvchi"}
               </h3>
-              <p className="text-xs text-[#8BA88E] mt-0.5">
-                Ta'lim yo'nalishi: {appUser?.selectedTrack === 'design' ? 'Grafik Dizayn' : 'Kompyuter Savodxonligi'}
-              </p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div
-                onClick={() => setActiveSubTab('smart_coins')}
-                className="bg-amber-400/20 hover:bg-amber-400/30 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-400/40 text-center min-w-[95px] cursor-pointer transition group"
-                title="SMART COIN hamyonimga o'tish"
-              >
-                <p className="text-[10px] text-amber-300 uppercase font-bold flex items-center justify-center gap-1">
-                  <Coins className="w-3 h-3 text-amber-300" />
-                  <span>SMART COIN</span>
-                </p>
-                <p className="text-2xl font-serif italic text-amber-300 font-bold mt-0.5 group-hover:scale-105 transition-transform">
-                  {myCoinBalance} SC
-                </p>
-              </div>
-              <div 
-                onClick={() => setActiveSubTab('leaderboard')}
-                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 text-center min-w-[90px] cursor-pointer transition group"
-                title="Reyting jadvaliga o'tish"
-              >
-                <p className="text-[10px] text-amber-300 uppercase font-bold flex items-center justify-center gap-1">
-                  <Trophy className="w-3 h-3 text-amber-400" />
-                  <span>Reyting</span>
-                </p>
-                <p className="text-2xl font-serif italic text-amber-300 font-bold mt-0.5 group-hover:scale-105 transition-transform">
-                  {studentRank.rank > 0 ? `#${studentRank.rank}` : "—"}
-                </p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 text-center min-w-[90px]">
-                <p className="text-[10px] text-white/70 uppercase font-bold">O'rtacha Baho</p>
-                <p className="text-2xl font-serif italic text-[#8BA88E] font-bold mt-0.5">
-                  {teacherAverage > 0 ? `${teacherAverage}%` : "—"}
-                </p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 text-center min-w-[90px]">
-                <p className="text-[10px] text-white/70 uppercase font-bold">Baholar Soni</p>
-                <p className="text-2xl font-serif italic text-white font-bold mt-0.5">
-                  {grades.length} ta
-                </p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10 text-center min-w-[90px]">
-                <p className="text-[10px] text-white/70 uppercase font-bold">Eng Yuqori</p>
-                <p className="text-2xl font-serif italic text-amber-300 font-bold mt-0.5">
-                  {highestGrade > 0 ? `${highestGrade}` : "—"}
-                </p>
-              </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Compact Metrics Bar */}
+            <div
+              onClick={() => setActiveSubTab('smart_coins')}
+              className="bg-amber-400/20 hover:bg-amber-400/30 px-3 py-2 rounded-xl border border-amber-400/40 text-center cursor-pointer transition"
+              title="SMART COIN hamyonimga o'tish"
+            >
+              <p className="text-[9px] text-amber-300 uppercase font-bold flex items-center justify-center gap-1">
+                <Coins className="w-3 h-3 text-amber-300" />
+                <span>COIN</span>
+              </p>
+              <p className="text-base font-serif italic text-amber-300 font-bold">
+                {myCoinBalance} SC
+              </p>
+            </div>
+            <div 
+              onClick={() => setActiveSubTab('leaderboard')}
+              className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl border border-white/10 text-center cursor-pointer transition"
+              title="Reyting jadvaliga o'tish"
+            >
+              <p className="text-[9px] text-amber-300 uppercase font-bold flex items-center justify-center gap-1">
+                <Trophy className="w-3 h-3 text-amber-400" />
+                <span>Reyting</span>
+              </p>
+              <p className="text-base font-serif italic text-amber-300 font-bold">
+                {studentRank.rank > 0 ? `#${studentRank.rank}` : "—"}
+              </p>
+            </div>
+            <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/10 text-center">
+              <p className="text-[9px] text-white/70 uppercase font-bold">O'rtacha</p>
+              <p className="text-base font-serif italic text-[#8BA88E] font-bold">
+                {teacherAverage > 0 ? `${teacherAverage}%` : "—"}
+              </p>
+            </div>
+            <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/10 text-center">
+              <p className="text-[9px] text-white/70 uppercase font-bold">Baholar</p>
+              <p className="text-base font-serif italic text-white font-bold">
+                {grades.length} ta
+              </p>
             </div>
 
             {/* Profile launcher button */}
             <button
               onClick={() => setIsProfileOpen(true)}
-              className="w-full sm:w-auto px-5 py-3.5 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-[#1C2C1D] rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-black/10 shrink-0 group"
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-amber-200 text-[#1C2C1D] rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shrink-0"
             >
-              <UserCheck className="w-4 h-4 text-[#1C2C1D] group-hover:scale-110 transition-transform" />
-              <span>Mening IT Profilim & Sertifikat</span>
+              <UserCheck className="w-3.5 h-3.5 text-[#1C2C1D]" />
+              <span>Profil & Sertifikat</span>
             </button>
           </div>
         </div>
 
         {/* Live Next Lesson Notification Strip */}
         {studentNextLesson && (
-          <div className="mt-5 pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
-              <span className="text-white/80">
-                Keyingi darsingiz: <strong className="text-amber-300">{studentNextLesson.formattedDayName}</strong> ({studentNextLesson.formattedTime})
+          <div className="mt-3.5 pt-3 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span className="text-white/85">
+                Keyingi dars: <strong className="text-amber-300">{studentNextLesson.formattedDayName}</strong> ({studentNextLesson.formattedTime})
               </span>
-              <span className="hidden md:inline text-white/50">•</span>
-              <span className="hidden md:inline text-[#A3C4A6]">
-                {studentNextLesson.group.room}
+              <span className="text-white/40">•</span>
+              <span className="text-emerald-300 text-[11px] font-semibold">
+                📱 Darsdan 30 daqiqa oldin SMS eslatma yuboriladi
               </span>
             </div>
 
             <button
-              onClick={() => setActiveSubTab('schedule')}
-              className="px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto border border-white/20"
+              onClick={() => {
+                setActiveSubTab('reja');
+                setRejaSubView('schedule');
+              }}
+              className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold transition flex items-center gap-1.5 self-start sm:self-auto border border-white/20"
             >
               <Calendar className="w-3.5 h-3.5 text-amber-300" />
-              <span>Dars Jadvalini Ko'rish (Kalendar)</span>
+              <span>📋 Reja va SMS sozlamasi</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* TABS SWITCHER */}
-      <div className="flex items-center gap-2 bg-[#F5F5F0] dark:bg-[#111912] p-1.5 rounded-2xl border border-[#EBE7DF] dark:border-[#243326] flex-wrap sm:flex-nowrap">
+      {/* COMPACT TABS SWITCHER */}
+      <div className="flex items-center gap-1.5 bg-[#F5F5F0] dark:bg-[#111912] p-1.5 rounded-2xl border border-[#EBE7DF] dark:border-[#243326] flex-wrap">
         <button
           onClick={() => setActiveSubTab('teacher_grades')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'teacher_grades'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Award className="w-4 h-4 text-amber-400" />
-          <span>Ustoz Baholari</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-bold">
+          <Award className="w-3.5 h-3.5 text-amber-400" />
+          <span>Baholar</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-white font-bold">
             {grades.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('smart_coins')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'smart_coins'
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Coins className="w-4 h-4 text-amber-400" />
-          <span>🪙 SMART COIN</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-700 dark:text-amber-200 font-bold">
-            {myCoinBalance} SC
+          <Coins className="w-3.5 h-3.5 text-amber-400" />
+          <span>🪙 COIN</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400/25 text-amber-700 dark:text-amber-200 font-bold">
+            {myCoinBalance}
           </span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('homework')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'homework'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <FileText className="w-4 h-4 text-amber-400" />
-          <span>Uyga Vazifalar</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
+          <FileText className="w-3.5 h-3.5 text-amber-400" />
+          <span>Vazifalar</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
             {myHomeworksCount}
           </span>
         </button>
 
         <button
-          onClick={() => setActiveSubTab('leaderboard')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-            activeSubTab === 'leaderboard'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+          onClick={() => setActiveSubTab('reja')}
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            activeSubTab === 'reja'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Trophy className="w-4 h-4 text-amber-400" />
-          <span>Reyting Jadvali</span>
+          <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+          <span>📋 Reja</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/25 text-emerald-300 font-bold">
+            Dars + SMS
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('leaderboard')}
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            activeSubTab === 'leaderboard'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
+              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+          }`}
+        >
+          <Trophy className="w-3.5 h-3.5 text-amber-400" />
+          <span>Reyting</span>
           {studentRank.rank > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
               #{studentRank.rank}
             </span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveSubTab('lessons')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-            activeSubTab === 'lessons'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
-              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Bajarilgan Darslar & Daftarlar</span>
-        </button>
-
-        <button
           onClick={() => setActiveSubTab('games')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'games'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Trophy className="w-4 h-4" />
-          <span>O'yinlar Natijalari</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('schedule')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-            activeSubTab === 'schedule'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
-              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-          }`}
-        >
-          <Calendar className="w-4 h-4 text-emerald-400" />
-          <span>Dars Jadvali & Kalendar</span>
-          {studentNextLesson && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 dark:text-emerald-200 font-bold">
-              {studentNextLesson.group.shortName.split(' ')[0]}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setIsProfileOpen(true)}
-          className="py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF8F5] dark:bg-[#1A261D] text-[#2C3E2D] dark:text-[#8BA88E] hover:bg-[#EBE7DF] dark:hover:bg-[#253629] border border-[#EBE7DF] dark:border-[#243326] shrink-0"
-        >
-          <GraduationCap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Profilni Ochish</span>
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>O'yinlar</span>
         </button>
       </div>
 
@@ -481,7 +470,7 @@ export default function StudentDashboard({
                 Mening Baholarim Daftari (O'qituvchidan)
               </h4>
               <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-0.5">
-                O'qituvchingiz har bir dars, vazifa va amaliy ish uchun qo'ygan ballari hamda izohlari
+                O'qituvchingiz va Admin har bir dars, vazifa va amaliy ish uchun qo'ygan ballari hamda izohlari
               </p>
             </div>
             {grades.length > 0 && (
@@ -579,65 +568,238 @@ export default function StudentDashboard({
       )}
 
       {/* ========================================================================= */}
-      {/* 2. COMPLETED LESSONS & NOTES */}
+      {/* 2. UNIFIED "📋 REJA" SECTION (SCHEDULE + ALL COURSE PLANS + 30-MIN SMS)   */}
       {/* ========================================================================= */}
-      {activeSubTab === 'lessons' && (
-        <div className="bg-white dark:bg-[#152017] rounded-3xl p-6 border border-[#EBE7DF] dark:border-[#243326] shadow-sm flex flex-col gap-6">
-          <div>
-            <h4 className="font-serif italic text-[#1A2E1C] dark:text-[#E6EAE7] text-lg flex items-center gap-2 font-normal">
-              <BookOpen className="w-5 h-5 text-[#8BA88E]" />
-              Mening Darsliklarim Daftari
-            </h4>
-            <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">
-              Siz tamomlagan barcha darslar va yozgan shaxsiy dars eslatmalaringiz
-            </p>
-          </div>
+      {activeSubTab === 'reja' && (
+        <div className="flex flex-col gap-5">
+          {/* 30-Minute SMS Reminder Phone Card */}
+          <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 border border-[#EBE7DF] dark:border-[#243326] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <BellRing className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-[#1A2E1C] dark:text-[#E6EAE7] flex items-center gap-2">
+                  <span>📱 Darsdan 30 daqiqa oldin SMS Eslatma</span>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                    Avtomatik
+                  </span>
+                </h4>
+                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-0.5">
+                  Dars vaqtingiz boshlanishiga 30 daqiqa qolganda telefon raqamingizga avtomatik SMS xabarnoma yuboriladi.
+                </p>
+              </div>
+            </div>
 
-          <div className="flex flex-col gap-4 overflow-y-auto max-h-[500px] pr-2">
-            {stats.progressList.map((prog) => (
-              <div
-                key={prog.id}
-                className="p-4 rounded-2xl border border-[#EBE7DF] dark:border-[#243326] bg-[#FDFBF7] dark:bg-[#101712] hover:bg-[#F5F5F0]/40 dark:hover:bg-[#18241B] transition flex flex-col md:flex-row md:items-start justify-between gap-4"
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Phone className="w-3.5 h-3.5 text-[#828282] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="+998 90 123 45 67"
+                  className="pl-8 pr-3 py-2 rounded-xl bg-[#FAF8F5] dark:bg-[#101712] border border-[#EBE7DF] dark:border-[#283A2C] text-xs font-bold text-[#1A2E1C] dark:text-white focus:outline-none focus:border-emerald-500 w-44"
+                />
+              </div>
+              <button
+                onClick={handleSaveStudentPhone}
+                className="px-4 py-2 rounded-xl bg-[#2C3E2D] hover:bg-[#1E2B1F] text-white text-xs font-bold transition flex items-center gap-1.5 shrink-0"
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold border bg-[#2C3E2D] dark:bg-[#2F4632] text-white border-[#2C3E2D] dark:border-[#3A563E]">
-                      {`Dars #${prog.lessonId}`}
-                    </span>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] flex items-center gap-1 font-semibold">
-                      <Clock className="w-3 h-3 text-[#8BA88E]" />
-                      {new Date(prog.completedAt).toLocaleDateString('uz-UZ')}
-                    </span>
-                  </div>
-                  <h5 className="font-bold text-[#2D2D2D] dark:text-[#E6EAE7] text-sm">
-                    {getLessonName(prog.lessonId)}
-                  </h5>
-
-                  {prog.notes && (
-                    <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-[#152017] border border-[#EBE7DF] dark:border-[#243326] text-xs text-[#2D2D2D] dark:text-[#C5D0C7] flex items-start gap-2 shadow-inner">
-                      <FileText className="w-3.5 h-3.5 text-[#8BA88E] shrink-0 mt-0.5" />
-                      <p className="italic leading-relaxed">{prog.notes}</p>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => onSelectLesson(prog.lessonId)}
-                  className="px-4 py-2 bg-white dark:bg-[#1A261D] hover:bg-[#F5F5F0] dark:hover:bg-[#223326] border border-[#EBE7DF] dark:border-[#283A2C] text-[#2D2D2D] dark:text-[#E6EAE7] rounded-full text-xs font-bold self-end md:self-start shrink-0 transition-all"
-                >
-                  Darsga Kirish
-                </button>
-              </div>
-            ))}
-
-            {stats.progressList.length === 0 && (
-              <div className="text-center py-20 border-2 border-dashed border-[#EBE7DF] dark:border-[#243326] rounded-3xl bg-[#FDFBF7] dark:bg-[#101712]">
-                <BookOpen className="w-10 h-10 text-[#8BA88E]/40 mx-auto mb-3" />
-                <p className="text-[#2D2D2D] dark:text-[#E6EAE7] font-bold text-sm">Hali birorta dars o'rganilmagan</p>
-                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">Mavzulardan birini tanlab o'rganishni boshlang!</p>
-              </div>
-            )}
+                {phoneSavedMsg ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Phone className="w-3.5 h-3.5" />}
+                <span>{phoneSavedMsg ? 'Saqlandi!' : 'Saqlash'}</span>
+              </button>
+            </div>
           </div>
+
+          {/* Sub-navigation inside Reja */}
+          <div className="bg-white dark:bg-[#152017] rounded-2xl p-3 border border-[#EBE7DF] dark:border-[#243326] flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setRejaSubView('schedule')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  rejaSubView === 'schedule'
+                    ? 'bg-[#2C3E2D] text-white shadow-xs'
+                    : 'bg-[#FAF8F5] dark:bg-[#1A261D] text-[#828282] dark:text-[#9FB1A2] hover:text-[#1A2E1C]'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <span>📅 Dars Jadvali & Kalendar</span>
+              </button>
+              <button
+                onClick={() => setRejaSubView('all_plans')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  rejaSubView === 'all_plans'
+                    ? 'bg-[#2C3E2D] text-white shadow-xs'
+                    : 'bg-[#FAF8F5] dark:bg-[#1A261D] text-[#828282] dark:text-[#9FB1A2] hover:text-[#1A2E1C]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-amber-400" />
+                <span>📚 Barcha Dars Rejalari (84 ta dars)</span>
+              </button>
+              <button
+                onClick={() => setRejaSubView('completed')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  rejaSubView === 'completed'
+                    ? 'bg-[#2C3E2D] text-white shadow-xs'
+                    : 'bg-[#FAF8F5] dark:bg-[#1A261D] text-[#828282] dark:text-[#9FB1A2] hover:text-[#1A2E1C]'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[#8BA88E]" />
+                <span>📓 Bajarilgan Darslar ({stats.progressList.length})</span>
+              </button>
+            </div>
+          </div>
+
+          {rejaSubView === 'schedule' && (
+            <LessonScheduleCalendar
+              appUser={appUser}
+              selectedStudentName={currentStudent.fullName}
+              onSelectTrackLesson={onSelectTrackLesson}
+            />
+          )}
+
+          {rejaSubView === 'all_plans' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Plan 1: Savodxonlik */}
+              <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col justify-between gap-4">
+                <div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#2C3E2D]/10 dark:bg-white/10 text-[#2C3E2D] dark:text-[#8BA88E]">
+                    3 Oy • 36 ta Dars
+                  </span>
+                  <h5 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-white mt-2">
+                    💻 Kompyuter Savodxonligi
+                  </h5>
+                  <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">
+                    1-oy: Kompyuter & Windows, 2-oy: Word & Excel, 3-oy: PowerPoint, Internet & Xavfsizlik.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {ALL_LITERACY_LESSONS.map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => onSelectTrackLesson ? onSelectTrackLesson('literacy', l.id) : onSelectLesson(l.id)}
+                        className="text-left px-3 py-1.5 rounded-xl bg-[#FAF8F5] dark:bg-[#101712] hover:bg-[#2C3E2D] hover:text-white text-xs font-semibold transition truncate"
+                      >
+                        #{l.id}. {l.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Plan 2: Grafik Dizayn (Canva & Figma) */}
+              <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col justify-between gap-4">
+                <div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                    2 Modul • 24 ta Dars
+                  </span>
+                  <h5 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-white mt-2">
+                    🎨 Grafik Dizayn (Canva & Figma)
+                  </h5>
+                  <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">
+                    1-Modul: Canva va Brending (12 dars). 2-Modul: Figma UI/UX Veb-Dizayn (12 dars).
+                  </p>
+                  <div className="mt-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {ALL_DESIGN_LESSONS.filter((l) => l.id <= 24).map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => onSelectTrackLesson && onSelectTrackLesson('design', l.id)}
+                        className="text-left px-3 py-1.5 rounded-xl bg-[#FAF8F5] dark:bg-[#101712] hover:bg-[#2C3E2D] hover:text-white text-xs font-semibold transition truncate"
+                      >
+                        #{l.id}. {l.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Plan 3: Frontend (HTML5 & CSS3) */}
+              <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col justify-between gap-4">
+                <div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                    2 Modul • 24 ta Dars
+                  </span>
+                  <h5 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-white mt-2">
+                    🌐 Frontend (HTML5 & CSS3)
+                  </h5>
+                  <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">
+                    3-Modul: HTML5 Semantikasi (12 dars). 4-Modul: CSS3, Flexbox, Grid va Responsive (12 dars).
+                  </p>
+                  <div className="mt-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {ALL_DESIGN_LESSONS.filter((l) => l.id > 24).map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => onSelectTrackLesson && onSelectTrackLesson('design', l.id)}
+                        className="text-left px-3 py-1.5 rounded-xl bg-[#FAF8F5] dark:bg-[#101712] hover:bg-[#2C3E2D] hover:text-white text-xs font-semibold transition truncate"
+                      >
+                        #{l.id - 24}. {l.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {rejaSubView === 'completed' && (
+            <div className="bg-white dark:bg-[#152017] rounded-3xl p-6 border border-[#EBE7DF] dark:border-[#243326] shadow-sm flex flex-col gap-6">
+              <div>
+                <h4 className="font-serif italic text-[#1A2E1C] dark:text-[#E6EAE7] text-lg flex items-center gap-2 font-normal">
+                  <BookOpen className="w-5 h-5 text-[#8BA88E]" />
+                  Mening Darsliklarim Daftari
+                </h4>
+                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">
+                  Siz tamomlagan barcha darslar va yozgan shaxsiy dars eslatmalaringiz
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-4 overflow-y-auto max-h-[500px] pr-2">
+                {stats.progressList.map((prog) => (
+                  <div
+                    key={prog.id}
+                    className="p-4 rounded-2xl border border-[#EBE7DF] dark:border-[#243326] bg-[#FDFBF7] dark:bg-[#101712] hover:bg-[#F5F5F0]/40 dark:hover:bg-[#18241B] transition flex flex-col md:flex-row md:items-start justify-between gap-4"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold border bg-[#2C3E2D] dark:bg-[#2F4632] text-white border-[#2C3E2D] dark:border-[#3A563E]">
+                          {`Dars #${prog.lessonId}`}
+                        </span>
+                        <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] flex items-center gap-1 font-semibold">
+                          <Clock className="w-3 h-3 text-[#8BA88E]" />
+                          {new Date(prog.completedAt).toLocaleDateString('uz-UZ')}
+                        </span>
+                      </div>
+                      <h5 className="font-bold text-[#2D2D2D] dark:text-[#E6EAE7] text-sm">
+                        {getLessonName(prog.lessonId)}
+                      </h5>
+
+                      {prog.notes && (
+                        <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-[#152017] border border-[#EBE7DF] dark:border-[#243326] text-xs text-[#2D2D2D] dark:text-[#C5D0C7] flex items-start gap-2 shadow-inner">
+                          <FileText className="w-3.5 h-3.5 text-[#8BA88E] shrink-0 mt-0.5" />
+                          <p className="italic leading-relaxed">{prog.notes}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => onSelectLesson(prog.lessonId)}
+                      className="px-4 py-2 bg-white dark:bg-[#1A261D] hover:bg-[#F5F5F0] dark:hover:bg-[#223326] border border-[#EBE7DF] dark:border-[#283A2C] text-[#2D2D2D] dark:text-[#E6EAE7] rounded-full text-xs font-bold self-end md:self-start shrink-0 transition-all"
+                    >
+                      Darsga Kirish
+                    </button>
+                  </div>
+                ))}
+
+                {stats.progressList.length === 0 && (
+                  <div className="text-center py-16 border-2 border-dashed border-[#EBE7DF] dark:border-[#243326] rounded-3xl bg-[#FDFBF7] dark:bg-[#101712]">
+                    <BookOpen className="w-10 h-10 text-[#8BA88E]/40 mx-auto mb-3" />
+                    <p className="text-[#2D2D2D] dark:text-[#E6EAE7] font-bold text-sm">Hali birorta dars o'rganilmagan</p>
+                    <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">Mavzulardan birini tanlab o'rganishni boshlang!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -673,19 +835,6 @@ export default function StudentDashboard({
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 4. LESSON SCHEDULE & CALENDAR VIEW (DARS JADVALI VA KALENDAR) */}
-      {/* ========================================================================= */}
-      {activeSubTab === 'schedule' && (
-        <div className="flex flex-col gap-6">
-          <LessonScheduleCalendar
-            appUser={appUser}
-            selectedStudentName={currentStudent.fullName}
-            onSelectTrackLesson={onSelectTrackLesson}
-          />
         </div>
       )}
 

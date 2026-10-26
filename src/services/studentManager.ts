@@ -25,17 +25,275 @@ export interface StudentGrade {
   teacherName: string;
 }
 
-// Single authorized Teacher Account
+export interface TeacherAccount {
+  id: string;
+  fullName: string;
+  login: string;
+  password: string;
+  subject: string;
+  phone?: string;
+  adminScore?: number | null;
+  adminFeedback?: string | null;
+  createdAt: string;
+}
+
+export interface TeacherEvaluation {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  score: number;
+  maxScore: number;
+  studentAvgRating?: string;
+  comment: string;
+  evaluatedBy: string;
+  evaluatedAt: string;
+}
+
+export interface SmsLogRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  phone: string;
+  groupId: string;
+  groupName: string;
+  lessonDateKey: string;
+  message: string;
+  status: string;
+  sentAt: string;
+}
+
+// Default Teacher Account
 export const TEACHER_CREDENTIALS = {
   login: 'Assadxoja',
   password: '@xoja.1506',
   name: 'Assadxoja',
 };
 
-export const authenticateTeacher = (login: string, pass: string): boolean => {
-  const cleanLogin = login.trim();
+// Default Admin Account
+export const ADMIN_CREDENTIALS = {
+  login: 'admin',
+  password: 'Admin@2026#',
+  name: 'Bosh Admin',
+};
+
+const STORAGE_TEACHERS_KEY = 'it_portal_teachers_db';
+const STORAGE_TEACHER_EVALS_KEY = 'it_portal_teacher_evals_db';
+const STORAGE_SMS_LOGS_KEY = 'it_portal_sms_logs_db';
+
+export const INITIAL_TEACHERS: TeacherAccount[] = [
+  {
+    id: 'tch_assadxoja',
+    fullName: 'Assadxoja',
+    login: 'Assadxoja',
+    password: '@xoja.1506',
+    subject: 'IT Savodxonlik, Grafik Dizayn & Frontend',
+    phone: '+998 90 123 45 67',
+    adminScore: 98,
+    adminFeedback: "Darslarni yuqori sifatda va zamonaviy metodika asosida olib bormoqda.",
+    createdAt: '2026-10-19T00:00:00.000Z',
+  },
+];
+
+export const getStoredTeachers = (): TeacherAccount[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_TEACHERS_KEY);
+    if (!raw) {
+      localStorage.setItem(STORAGE_TEACHERS_KEY, JSON.stringify(INITIAL_TEACHERS));
+      return INITIAL_TEACHERS;
+    }
+    const parsed: TeacherAccount[] = JSON.parse(raw);
+    return parsed.length > 0 ? parsed : INITIAL_TEACHERS;
+  } catch {
+    return INITIAL_TEACHERS;
+  }
+};
+
+export const saveTeachers = (teachers: TeacherAccount[]): void => {
+  localStorage.setItem(STORAGE_TEACHERS_KEY, JSON.stringify(teachers));
+  window.dispatchEvent(new CustomEvent('teachers_updated'));
+};
+
+export const addTeacher = (data: {
+  fullName: string;
+  login: string;
+  password: string;
+  subject?: string;
+  phone?: string;
+}): TeacherAccount => {
+  const teachers = getStoredTeachers();
+  const newTeacher: TeacherAccount = {
+    id: `tch_${Date.now()}`,
+    fullName: data.fullName.trim(),
+    login: data.login.trim(),
+    password: data.password.trim(),
+    subject: data.subject?.trim() || 'IT Savodxonlik & Grafik Dizayn',
+    phone: data.phone?.trim() || '',
+    createdAt: new Date().toISOString(),
+  };
+  const updated = [newTeacher, ...teachers];
+  saveTeachers(updated);
+  fetch('/api/teachers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newTeacher),
+  }).catch(() => {});
+  return newTeacher;
+};
+
+export const updateTeacher = (id: string, updates: Partial<TeacherAccount>): TeacherAccount | null => {
+  const teachers = getStoredTeachers();
+  const idx = teachers.findIndex((t) => t.id === id);
+  if (idx === -1) return null;
+  const updatedItem = { ...teachers[idx], ...updates };
+  teachers[idx] = updatedItem;
+  saveTeachers(teachers);
+  fetch('/api/teachers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updatedItem),
+  }).catch(() => {});
+  return updatedItem;
+};
+
+export const deleteTeacher = (id: string): boolean => {
+  const teachers = getStoredTeachers();
+  const filtered = teachers.filter((t) => t.id !== id);
+  if (filtered.length === teachers.length) return false;
+  saveTeachers(filtered);
+  fetch(`/api/teachers/${id}`, { method: 'DELETE' }).catch(() => {});
+  return true;
+};
+
+export const getStoredTeacherEvaluations = (): TeacherEvaluation[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_TEACHER_EVALS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const addTeacherEvaluation = (data: {
+  teacherId: string;
+  teacherName: string;
+  score: number;
+  maxScore?: number;
+  studentAvgRating?: string;
+  comment: string;
+  evaluatedBy?: string;
+}): TeacherEvaluation => {
+  const list = getStoredTeacherEvaluations();
+  const item: TeacherEvaluation = {
+    id: `teval_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    teacherId: data.teacherId,
+    teacherName: data.teacherName,
+    score: data.score,
+    maxScore: data.maxScore || 100,
+    studentAvgRating: data.studentAvgRating || '5.0',
+    comment: data.comment.trim(),
+    evaluatedBy: data.evaluatedBy || 'Bosh Admin',
+    evaluatedAt: new Date().toISOString(),
+  };
+  const updated = [item, ...list];
+  localStorage.setItem(STORAGE_TEACHER_EVALS_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('teacher_evals_updated'));
+  fetch('/api/teacher-evaluations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item),
+  }).catch(() => {});
+  // Also update teacher's latest adminScore & adminFeedback
+  updateTeacher(data.teacherId, {
+    adminScore: data.score,
+    adminFeedback: data.comment.trim(),
+  });
+  return item;
+};
+
+export const deleteTeacherEvaluation = (id: string): void => {
+  const list = getStoredTeacherEvaluations().filter((e) => e.id !== id);
+  localStorage.setItem(STORAGE_TEACHER_EVALS_KEY, JSON.stringify(list));
+  window.dispatchEvent(new CustomEvent('teacher_evals_updated'));
+  fetch(`/api/teacher-evaluations/${id}`, { method: 'DELETE' }).catch(() => {});
+};
+
+export const getStoredSmsLogs = (): SmsLogRecord[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_SMS_LOGS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const sendStudentSms = async (payload: {
+  studentId: string;
+  studentName: string;
+  phone: string;
+  groupId: string;
+  groupName: string;
+  message: string;
+}): Promise<SmsLogRecord> => {
+  try {
+    const res = await fetch('/api/sms/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.log) {
+        const logs = [data.log, ...getStoredSmsLogs()];
+        localStorage.setItem(STORAGE_SMS_LOGS_KEY, JSON.stringify(logs));
+        window.dispatchEvent(new CustomEvent('sms_logs_updated'));
+        return data.log;
+      }
+    }
+  } catch {
+    // fallback local log
+  }
+  const fallback: SmsLogRecord = {
+    id: `sms_${Date.now()}`,
+    studentId: payload.studentId,
+    studentName: payload.studentName,
+    phone: payload.phone,
+    groupId: payload.groupId,
+    groupName: payload.groupName,
+    lessonDateKey: new Date().toISOString().slice(0, 10),
+    message: payload.message,
+    status: 'sent',
+    sentAt: new Date().toISOString(),
+  };
+  const logs = [fallback, ...getStoredSmsLogs()];
+  localStorage.setItem(STORAGE_SMS_LOGS_KEY, JSON.stringify(logs));
+  window.dispatchEvent(new CustomEvent('sms_logs_updated'));
+  return fallback;
+};
+
+export const authenticateTeacher = (login: string, pass: string): TeacherAccount | null => {
+  const cleanLogin = login.trim().toLowerCase();
   const cleanPass = pass.trim();
-  return cleanLogin.toLowerCase() === TEACHER_CREDENTIALS.login.toLowerCase() && cleanPass === TEACHER_CREDENTIALS.password;
+  const teachers = getStoredTeachers();
+  const found = teachers.find(
+    (t) => t.login.trim().toLowerCase() === cleanLogin && t.password === cleanPass
+  );
+  if (found) return found;
+  if (
+    cleanLogin === TEACHER_CREDENTIALS.login.toLowerCase() &&
+    cleanPass === TEACHER_CREDENTIALS.password
+  ) {
+    return INITIAL_TEACHERS[0];
+  }
+  return null;
+};
+
+export const authenticateAdmin = (login: string, pass: string): boolean => {
+  const cleanLogin = login.trim().toLowerCase();
+  const cleanPass = pass.trim();
+  return (
+    (cleanLogin === ADMIN_CREDENTIALS.login.toLowerCase() && cleanPass === ADMIN_CREDENTIALS.password) ||
+    (cleanLogin === 'assadxoja' && cleanPass === '@xoja.1506')
+  );
 };
 
 const STORAGE_STUDENTS_KEY = 'it_portal_students_db';
@@ -158,13 +416,23 @@ export const INITIAL_STUDENTS: StudentAccount[] = [
     createdAt: '2026-10-19T00:00:00.000Z',
     notes: "IT Savodxonlik va Grafik dizayn o'quvchisi",
   },
+  {
+    id: 'std_1792492596610',
+    fullName: 'Sultonxon',
+    login: 'sultonxon',
+    password: 'Sultonxon@584#',
+    gradeClass: '5-A sinf',
+    enrolledTrack: 'both',
+    createdAt: '2026-10-26T00:00:00.000Z',
+    notes: "IT Savodxonlik va Grafik dizayn o'quvchisi",
+  },
 ];
 
 // Initial grades - cleared as requested (barcha o'quvchilar baholari tozalandi)
 export const INITIAL_GRADES: StudentGrade[] = [];
 
 
-const STUDENTS_SEEDED_FLAG = 'it_portal_students_v3_seeded';
+const STUDENTS_SEEDED_FLAG = 'it_portal_students_v4_seeded';
 
 export const getStoredStudents = (): StudentAccount[] => {
   try {
@@ -686,9 +954,9 @@ export const addOrUpdateRating = (data: {
   if (existingIdx >= 0) {
     resultItem = {
       ...ratings[existingIdx],
-      studentName: data.studentName,
-      studentLogin: data.studentLogin || ratings[existingIdx].studentLogin,
-      studentGradeClass: data.studentGradeClass || ratings[existingIdx].studentGradeClass,
+      studentName: "Anonim O'quvchi",
+      studentLogin: 'anonim',
+      studentGradeClass: 'Anonim',
       lessonTitle: data.lessonTitle,
       rating: cleanRating,
       comment: data.comment.trim(),
@@ -699,9 +967,9 @@ export const addOrUpdateRating = (data: {
     resultItem = {
       id: `rtg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       studentId: data.studentId,
-      studentName: data.studentName,
-      studentLogin: data.studentLogin,
-      studentGradeClass: data.studentGradeClass || '5-sinf',
+      studentName: "Anonim O'quvchi",
+      studentLogin: 'anonim',
+      studentGradeClass: 'Anonim',
       track: data.track,
       lessonId: data.lessonId,
       lessonTitle: data.lessonTitle,
@@ -887,16 +1155,30 @@ export const getStudentRank = (
 export const syncWithServer = async (): Promise<void> => {
   if (typeof window === 'undefined') return;
   try {
-    const [stdRes, grdRes, rtgRes] = await Promise.all([
+    const [stdRes, grdRes, rtgRes, tchRes, evalRes, smsRes] = await Promise.all([
       fetch('/api/students'),
       fetch('/api/grades'),
       fetch('/api/ratings'),
+      fetch('/api/teachers').catch(() => null),
+      fetch('/api/teacher-evaluations').catch(() => null),
+      fetch('/api/sms-logs').catch(() => null),
     ]);
 
     if (stdRes.ok) {
       const data = await stdRes.json();
       if (Array.isArray(data.students) && data.students.length > 0) {
-        localStorage.setItem(STORAGE_STUDENTS_KEY, JSON.stringify(data.students));
+        const merged = [...data.students];
+        for (const st of INITIAL_STUDENTS) {
+          if (!merged.some((existing: StudentAccount) => existing.login.toLowerCase() === st.login.toLowerCase())) {
+            merged.push(st);
+            fetch('/api/students', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(st),
+            }).catch(() => {});
+          }
+        }
+        localStorage.setItem(STORAGE_STUDENTS_KEY, JSON.stringify(merged));
       } else {
         // Seed initial students to shared DB once
         const students = getStoredStudents();
@@ -923,6 +1205,30 @@ export const syncWithServer = async (): Promise<void> => {
       if (Array.isArray(data.ratings)) {
         localStorage.setItem(STORAGE_RATINGS_KEY, JSON.stringify(data.ratings));
         window.dispatchEvent(new CustomEvent('lesson_ratings_updated'));
+      }
+    }
+
+    if (tchRes && tchRes.ok) {
+      const data = await tchRes.json();
+      if (Array.isArray(data.teachers) && data.teachers.length > 0) {
+        localStorage.setItem(STORAGE_TEACHERS_KEY, JSON.stringify(data.teachers));
+        window.dispatchEvent(new CustomEvent('teachers_updated'));
+      }
+    }
+
+    if (evalRes && evalRes.ok) {
+      const data = await evalRes.json();
+      if (Array.isArray(data.evaluations)) {
+        localStorage.setItem(STORAGE_TEACHER_EVALS_KEY, JSON.stringify(data.evaluations));
+        window.dispatchEvent(new CustomEvent('teacher_evals_updated'));
+      }
+    }
+
+    if (smsRes && smsRes.ok) {
+      const data = await smsRes.json();
+      if (Array.isArray(data.logs)) {
+        localStorage.setItem(STORAGE_SMS_LOGS_KEY, JSON.stringify(data.logs));
+        window.dispatchEvent(new CustomEvent('sms_logs_updated'));
       }
     }
   } catch (err) {

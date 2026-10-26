@@ -372,17 +372,19 @@ Tizimga kirish logini: ${student.login}`;
             <span>Yutuq Nishonlari ({profile.badges.filter(b => b.unlocked).length})</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('ratings')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-              activeTab === 'ratings'
-                ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
-                : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-            }`}
-          >
-            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-            <span>Dars Baholari & Fikrlari ({studentRatings.length})</span>
-          </button>
+          {!isTeacherView && (
+            <button
+              onClick={() => setActiveTab('ratings')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                activeTab === 'ratings'
+                  ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
+                  : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+              }`}
+            >
+              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+              <span>Dars Baholari & Fikrlari ({studentRatings.length})</span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('schedule')}

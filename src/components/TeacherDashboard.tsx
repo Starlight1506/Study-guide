@@ -74,8 +74,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   teacherName = 'Assadxoja',
   onSelectStudentLesson,
 }) => {
-  // Main Tab State
-  const [activeSubTab, setActiveSubTab] = useState<'students' | 'grading' | 'smart_coins' | 'homework' | 'reviews' | 'leaderboard' | 'schedule' | 'courses'>('students');
+  // Main Tab State (schedule & courses consolidated into 'reja')
+  const [activeSubTab, setActiveSubTab] = useState<'students' | 'grading' | 'smart_coins' | 'homework' | 'reviews' | 'leaderboard' | 'reja'>('students');
+  const [rejaSubView, setRejaSubView] = useState<'plans' | 'schedule'>('plans');
   const [pendingHwCount, setPendingHwCount] = useState<number>(0);
   const [totalCoinsCount, setTotalCoinsCount] = useState<number>(0);
   const [coinTargetStudentId, setCoinTargetStudentId] = useState<string>('');
@@ -417,179 +418,137 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
       )}
 
-      {/* Teacher Welcome Header */}
-      <div className="bg-[#2C3E2D] text-white rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-lg border border-[#8BA88E]/30">
-        <div className="relative z-10 max-w-3xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-[#8BA88E] text-xs font-bold mb-3 border border-white/10">
+      {/* Compact Teacher Welcome Header */}
+      <div className="bg-[#2C3E2D] text-white rounded-3xl p-5 md:p-6 relative overflow-hidden shadow-md border border-[#8BA88E]/30 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white/10 rounded-full text-[#8BA88E] text-[11px] font-bold mb-1.5 border border-white/10">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>O'qituvchi Boshqaruv Markazi</span>
           </div>
-          <h2 className="text-2xl md:text-3xl font-serif italic font-bold tracking-tight">
-            {teacherName ? `Salom, ${teacherName}!` : 'O\'qituvchi Kabineti'}
+          <h2 className="text-xl md:text-2xl font-serif italic font-bold tracking-tight">
+            {teacherName ? `Salom, ${teacherName}!` : "O'qituvchi Kabineti"}
           </h2>
-          <p className="text-xs md:text-sm text-[#8BA88E] mt-2 leading-relaxed">
-            O'quvchilarga login va parol bering, darslar yakunida o'quvchilar qoldirgan baho va fikrlarni kuzating hamda ularni baholab boring.
+          <p className="text-xs text-[#8BA88E] mt-1">
+            O'quvchilar, baholar, SMART COIN, uyga vazifalar, anonim yulduzli baholar va yagona o'quv rejasi.
           </p>
-
-          {/* Teacher Summary Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-            <div className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] text-white/70 uppercase font-bold block">O'quvchilar</span>
-              <span className="text-xl md:text-2xl font-serif italic text-white font-bold mt-0.5 block">
-                {students.length} nafar
-              </span>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] text-white/70 uppercase font-bold block">Qo'yilgan Ballar</span>
-              <span className="text-xl md:text-2xl font-serif italic text-[#8BA88E] font-bold mt-0.5 block">
-                {grades.length} ta
-              </span>
-            </div>
-            <div 
-              onClick={() => setActiveSubTab('reviews')}
-              className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-amber-400/30 cursor-pointer hover:bg-white/15 transition group"
-              title="O'quvchilar darslarga bergan baholari va fikrlari"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-amber-200 uppercase font-bold block">O'quvchilar Bahosi</span>
-                <Star className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-              </div>
-              <span className="text-xl md:text-2xl font-serif italic text-amber-300 font-bold mt-0.5 block">
-                {averageLessonRating > 0 ? `${averageLessonRating} / 5` : "0.0"}
-                <span className="text-xs font-normal text-white/80 ml-1.5 font-sans">({ratings.length} fikr)</span>
-              </span>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm p-3.5 rounded-2xl border border-white/10">
-              <span className="text-[10px] text-white/70 uppercase font-bold block">Jami Darslar</span>
-              <span className="text-xl md:text-2xl font-serif italic text-[#8BA88E] font-bold mt-0.5 block">
-                {totalLiteracyLessons + totalDesignLessons} ta
-              </span>
-            </div>
-          </div>
         </div>
 
-        <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-10 translate-y-10">
-          <BarChart3 className="w-96 h-96 text-white" />
+        {/* Compact Summary Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10 shrink-0">
+          <div className="bg-white/10 backdrop-blur-xs px-3.5 py-2.5 rounded-2xl border border-white/10 text-center">
+            <span className="text-[10px] text-white/70 uppercase font-bold block">O'quvchilar</span>
+            <span className="text-lg font-serif italic text-white font-bold">{students.length} nafar</span>
+          </div>
+          <div className="bg-white/10 backdrop-blur-xs px-3.5 py-2.5 rounded-2xl border border-white/10 text-center">
+            <span className="text-[10px] text-white/70 uppercase font-bold block">Ballar</span>
+            <span className="text-lg font-serif italic text-[#8BA88E] font-bold">{grades.length} ta</span>
+          </div>
+          <div
+            onClick={() => setActiveSubTab('reviews')}
+            className="bg-white/10 backdrop-blur-xs px-3.5 py-2.5 rounded-2xl border border-amber-400/30 cursor-pointer hover:bg-white/15 transition text-center"
+            title="Anonim dars baholari"
+          >
+            <span className="text-[10px] text-amber-200 uppercase font-bold block">Anonim Baho</span>
+            <span className="text-lg font-serif italic text-amber-300 font-bold">
+              {averageLessonRating > 0 ? `${averageLessonRating}/5` : '5.0/5'}
+            </span>
+          </div>
+          <div
+            onClick={() => setActiveSubTab('reja')}
+            className="bg-white/10 backdrop-blur-xs px-3.5 py-2.5 rounded-2xl border border-white/10 cursor-pointer hover:bg-white/15 transition text-center"
+          >
+            <span className="text-[10px] text-white/70 uppercase font-bold block">Yagona Reja</span>
+            <span className="text-lg font-serif italic text-[#8BA88E] font-bold">
+              {totalLiteracyLessons + totalDesignLessons} dars
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* NAVIGATION TABS FOR TEACHER CABINET */}
-      <div className="flex flex-wrap items-center gap-2 bg-[#F5F5F0] dark:bg-[#111912] p-1.5 rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
+      {/* COMPACT NAVIGATION TABS FOR TEACHER CABINET */}
+      <div className="flex flex-wrap items-center gap-1.5 bg-[#F5F5F0] dark:bg-[#111912] p-1.5 rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
         <button
           onClick={() => setActiveSubTab('students')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'students'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>O'quvchilar & Login/Parol</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-bold">
-            {students.length}
-          </span>
+          <Users className="w-3.5 h-3.5" />
+          <span>O'quvchilar ({students.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('grading')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'grading'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Award className="w-4 h-4 text-emerald-400" />
-          <span>Ustoz Baholash Jurnali</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-bold">
-            {grades.length}
-          </span>
+          <Award className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Jurnal ({grades.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('smart_coins')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'smart_coins'
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Coins className="w-4 h-4 text-amber-400" />
-          <span>🪙 SMART COIN</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-700 dark:text-amber-200 font-bold">
-            {totalCoinsCount} SC
-          </span>
+          <Coins className="w-3.5 h-3.5 text-amber-400" />
+          <span>SMART COIN ({totalCoinsCount})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('homework')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'homework'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <FileText className="w-4 h-4 text-amber-400" />
-          <span>Uyga Vazifalar</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
-            {pendingHwCount > 0 ? `+${pendingHwCount} yangi` : 'Tekshirish'}
-          </span>
+          <FileText className="w-3.5 h-3.5 text-amber-400" />
+          <span>Vazifalar {pendingHwCount > 0 ? `(+${pendingHwCount})` : ''}</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('reviews')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'reviews'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-          <span>O'quvchilar Baholari & Fikrlari</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
-            {ratings.length}
-          </span>
+          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+          <span>Anonim Baholar ({ratings.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('leaderboard')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 min-w-[110px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
             activeSubTab === 'leaderboard'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Trophy className="w-4 h-4 text-amber-400" />
-          <span>Reyting Jadvali</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400/25 text-amber-300 dark:text-amber-200 font-bold">
-            Leaderboard
-          </span>
+          <Trophy className="w-3.5 h-3.5 text-amber-400" />
+          <span>Reyting</span>
         </button>
 
         <button
-          onClick={() => setActiveSubTab('schedule')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-            activeSubTab === 'schedule'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+          onClick={() => setActiveSubTab('reja')}
+          className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            activeSubTab === 'reja'
+              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-sm'
               : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
           }`}
         >
-          <Calendar className="w-4 h-4 text-emerald-400" />
-          <span>Dars Jadvali & Kalendar</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-400/20 text-emerald-300 dark:text-emerald-200 font-bold">
-            3 guruh
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('courses')}
-          className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-            activeSubTab === 'courses'
-              ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
-              : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Barcha Kurslar va Silabus</span>
+          <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+          <span>📋 Reja</span>
         </button>
       </div>
 
@@ -1340,16 +1299,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
-          {/* Search & Filter Bar */}
+          {/* Search & Filter Bar (Anonymous - No student filter) */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-white dark:bg-[#152017] p-4 rounded-2xl border border-[#EBE7DF] dark:border-[#243326] shadow-sm">
             {/* Search Input */}
-            <div className="md:col-span-4 relative">
+            <div className="md:col-span-6 relative">
               <Search className="w-4 h-4 text-[#828282] dark:text-[#9FB1A2] absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={reviewSearch}
                 onChange={(e) => setReviewSearch(e.target.value)}
-                placeholder="Fikr matni, o'quvchi ismi yoki dars bo'yicha..."
+                placeholder="Fikr matni yoki dars mavzusi bo'yicha qidirish..."
                 className="w-full pl-10 pr-4 py-2 bg-[#FAF8F5] dark:bg-[#111912] border border-[#EBE7DF] dark:border-[#253528] rounded-xl text-xs text-[#2D2D2D] dark:text-[#E6EAE7] placeholder-[#828282] focus:outline-none focus:border-[#8BA88E]"
               />
             </div>
@@ -1363,12 +1322,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               >
                 <option value="all">Barcha Kurslar</option>
                 <option value="literacy">💻 Kompyuter Savodxonligi</option>
-                <option value="design">🎨 Grafik Dizayn</option>
+                <option value="design">🎨 Grafik Dizayn & Frontend</option>
               </select>
             </div>
 
             {/* Rating Stars filter */}
-            <div className="md:col-span-2">
+            <div className="md:col-span-3">
               <select
                 value={reviewFilterRating}
                 onChange={(e) => setReviewFilterRating(e.target.value)}
@@ -1381,29 +1340,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <option value="1">⭐ Qoniqarsiz (1-2)</option>
               </select>
             </div>
-
-            {/* Student filter */}
-            <div className="md:col-span-3">
-              <select
-                value={reviewFilterStudent}
-                onChange={(e) => setReviewFilterStudent(e.target.value)}
-                className="w-full px-3 py-2 bg-[#FAF8F5] dark:bg-[#111912] border border-[#EBE7DF] dark:border-[#253528] rounded-xl text-xs text-[#2D2D2D] dark:text-[#E6EAE7] focus:outline-none focus:border-[#8BA88E]"
-              >
-                <option value="all">Barcha O'quvchilar</option>
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName} ({s.gradeClass})
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
-          {/* List of Reviews */}
+          {/* List of Anonymous Reviews */}
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between text-xs font-bold text-[#828282] dark:text-[#9FB1A2] px-1">
-              <span>Saralangan natijalar: {filteredRatings.length} ta fikr</span>
-              {(reviewSearch || reviewFilterTrack !== 'all' || reviewFilterRating !== 'all' || reviewFilterStudent !== 'all') && (
+              <span>Saralangan natijalar: {filteredRatings.length} ta anonim baho</span>
+              {(reviewSearch || reviewFilterTrack !== 'all' || reviewFilterRating !== 'all') && (
                 <button
                   onClick={() => {
                     setReviewSearch('');
@@ -1420,39 +1363,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredRatings.map((item) => {
-                const matchedStudent = students.find(
-                  (s) => s.id === item.studentId || (item.studentLogin && s.login === item.studentLogin)
-                );
-
                 return (
                   <div
                     key={item.id}
                     className="bg-white dark:bg-[#152017] rounded-3xl p-5 sm:p-6 border border-[#EBE7DF] dark:border-[#243326] hover:border-[#8BA88E]/40 shadow-sm transition-all flex flex-col justify-between gap-4 group"
                   >
                     <div>
-                      {/* Top Row: Student info & Stars */}
+                      {/* Top Row: Anonymous Student & Stars */}
                       <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#EBE7DF] dark:border-[#223024]">
-                        <div 
-                          onClick={() => {
-                            if (matchedStudent) {
-                              setProfileViewingStudent(matchedStudent);
-                            }
-                          }}
-                          className={`flex items-center gap-3 ${matchedStudent ? 'cursor-pointer group-hover:opacity-90' : ''}`}
-                        >
+                        <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#2C3E2D] to-[#446046] text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                            {item.studentName.charAt(0)}
+                            🔒
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <h4 className="text-sm font-bold text-[#1A2E1C] dark:text-[#E6EAE7] hover:text-[#8BA88E] transition">
-                                {item.studentName}
+                              <h4 className="text-sm font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                                Anonim O'quvchi
                               </h4>
-                              {item.studentGradeClass && (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FAF8F5] dark:bg-[#1C2B1F] text-[#828282] dark:text-[#9FB1A2] border border-[#EBE7DF] dark:border-[#283C2C]">
-                                  {item.studentGradeClass}
-                                </span>
-                              )}
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                                Maxfiy
+                              </span>
                             </div>
                             <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] flex items-center gap-1 mt-0.5">
                               <Clock className="w-3 h-3 text-[#8BA88E]" />
@@ -1489,7 +1419,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                               : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                           }`}>
-                            {item.track === 'design' ? '🎨 Dizayn' : '💻 Savodxonlik'}
+                            {item.track === 'design' ? '🎨 Dizayn & Frontend' : '💻 Savodxonlik'}
                           </span>
                           <span className="text-xs font-bold text-[#2C3E2D] dark:text-[#D4DFD6] truncate" title={item.lessonTitle}>
                             #{item.lessonId} — {item.lessonTitle}
@@ -1505,17 +1435,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                     {/* Bottom action row */}
                     <div className="flex items-center justify-between pt-2 border-t border-[#EBE7DF] dark:border-[#223024] text-[11px]">
-                      {matchedStudent ? (
-                        <button
-                          onClick={() => setProfileViewingStudent(matchedStudent)}
-                          className="px-3 py-1.5 rounded-xl bg-[#2C3E2D]/10 dark:bg-[#8BA88E]/15 text-[#2C3E2D] dark:text-[#A7C2AA] hover:bg-[#2C3E2D] hover:text-white dark:hover:bg-[#344E37] font-bold transition flex items-center gap-1.5"
-                        >
-                          <Users className="w-3.5 h-3.5" />
-                          <span>O'quvchi Profilini Ochish</span>
-                        </button>
-                      ) : (
-                        <span className="text-[#828282] dark:text-[#9FB1A2] italic text-[10px]">Mehmon o'quvchi</span>
-                      )}
+                      <span className="text-[#828282] dark:text-[#9FB1A2] italic text-[10px]">
+                        🔒 O'quvchi shaxsi yashirilgan (Anonim)
+                      </span>
 
                       <div className="flex items-center gap-2">
                         {onSelectStudentLesson && (
@@ -1532,7 +1454,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             if (confirm(`Ushbu fikrni o'chirishni tasdiqlaysizmi?`)) {
                               deleteRating(item.id);
                               refreshData();
-                              showToast("O'quvchi fikri o'chirildi.");
+                              showToast("Anonim fikr o'chirildi.");
                             }
                           }}
                           className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition"
@@ -1551,10 +1473,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="py-16 text-center bg-white dark:bg-[#152017] rounded-3xl border border-dashed border-[#EBE7DF] dark:border-[#243326]">
                 <Star className="w-10 h-10 text-amber-400/40 mx-auto mb-2" />
                 <p className="text-xs text-[#828282] dark:text-[#9FB1A2] font-semibold">
-                  Tanlangan parametrlar bo'yicha o'quvchi fikrlari topilmadi.
-                </p>
-                <p className="text-[11px] text-[#828282] dark:text-[#9FB1A2] mt-1">
-                  O'quvchilar darslarni yakunlaganda yulduzcha va sharh qoldirishadi va ular shu yerda aks etadi.
+                  Tanlangan parametrlar bo'yicha anonim o'quvchi fikrlari topilmadi.
                 </p>
               </div>
             )}
@@ -1583,34 +1502,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* SUBTAB: LESSON SCHEDULE & CALENDAR (DARS JADVALI VA KALENDAR) */}
-      {/* ========================================================================= */}
-      {activeSubTab === 'schedule' && (
-        <div className="flex flex-col gap-6">
-          <LessonScheduleCalendar
-            appUser={{
-              role: 'teacher',
-              name: teacherName || 'Assadxoja',
-              email: 'assadxoja@school.uz',
-              uid: 'teacher_assadxoja',
-              selectedTrack: null
-            }}
-            onSelectStudent={(studentName) => {
-              const found = students.find(
-                s => s.fullName.toLowerCase().includes(studentName.toLowerCase()) ||
-                     studentName.toLowerCase().includes(s.fullName.toLowerCase()) ||
-                     s.login.toLowerCase() === studentName.toLowerCase()
-              );
-              if (found) {
-                setProfileViewingStudent(found);
-              }
-            }}
-            onSelectTrackLesson={onSelectStudentLesson}
-          />
-        </div>
-      )}
-
-      {/* ========================================================================= */}
       {/* SUBTAB: SMART COIN SYSTEM (USTOZ SMART COIN BERISH VA JURNALI) */}
       {/* ========================================================================= */}
       {activeSubTab === 'smart_coins' && (
@@ -1622,131 +1513,153 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* SUBTAB 4: ALL COURSES (HAMMA KURSLAR SILABUSI) */}
+      {/* SUBTAB: UNIFIED REJA (BARCHA DARS REJALARI VA DARS JADVALI BITTA JOYDA)   */}
       {/* ========================================================================= */}
-      {activeSubTab === 'courses' && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
+      {activeSubTab === 'reja' && (
+        <div className="flex flex-col gap-5">
+          {/* Sub-switcher inside Reja */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#152017] p-4 rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
             <div>
-              <h3 className="text-lg font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
-                Barcha Mavjud Kurslar Ro'yxati
+              <h3 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                📋 Yagona O'quv Reja va Dars Jadvali
               </h3>
               <p className="text-xs text-[#828282] dark:text-[#9FB1A2]">
-                Platformada o'qitilayotgan barcha ta'lim yo'nalishlari
+                Barcha kurslar dars rejalari ({totalLiteracyLessons + totalDesignLessons} ta dars) hamda guruhlar jadvali bitta ixcham bo'limda
               </p>
             </div>
-            <span className="text-xs font-bold text-[#2C3E2D] dark:text-[#8BA88E] bg-[#8BA88E]/20 px-3 py-1 rounded-full">
-              2 ta Faol Kurs
-            </span>
+
+            <div className="flex items-center gap-1.5 bg-[#FAF8F5] dark:bg-[#111912] p-1 rounded-xl border border-[#EBE7DF] dark:border-[#243326]">
+              <button
+                type="button"
+                onClick={() => setRejaSubView('plans')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                  rejaSubView === 'plans'
+                    ? 'bg-[#2C3E2D] text-white shadow-xs'
+                    : 'text-[#828282] dark:text-[#9FB1A2]'
+                }`}
+              >
+                📚 O'quv Rejalar (Kurslar)
+              </button>
+              <button
+                type="button"
+                onClick={() => setRejaSubView('schedule')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                  rejaSubView === 'schedule'
+                    ? 'bg-[#2C3E2D] text-white shadow-xs'
+                    : 'text-[#828282] dark:text-[#9FB1A2]'
+                }`}
+              >
+                📅 Dars Jadvali & SMS (30m)
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* COURSE 1: KOMPYUTER SAVODXONLIGI */}
-            <div className="bg-white dark:bg-[#152017] rounded-3xl p-6 md:p-7 border-2 border-[#EBE7DF] dark:border-[#243326] hover:border-[#8BA88E] dark:hover:border-[#8BA88E] hover:shadow-xl transition-all flex flex-col justify-between group relative">
-              <div className="absolute top-6 right-6">
-                <span className="bg-[#8BA88E]/15 text-[#2C3E2D] dark:text-[#8BA88E] text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                  1-4 & 5-9 Sinflar
-                </span>
-              </div>
-
-              <div>
-                <div className="w-14 h-14 rounded-2xl bg-[#F5F5F0] dark:bg-[#111912] text-[#2C3E2D] dark:text-[#8BA88E] flex items-center justify-center mb-5 group-hover:bg-[#2C3E2D] group-hover:text-white transition-colors shadow-sm">
-                  <Laptop className="w-7 h-7" />
+          {rejaSubView === 'plans' ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Plan 1: Kompyuter Savodxonligi */}
+              <div className="bg-white dark:bg-[#152017] rounded-2xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col justify-between gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#2C3E2D]/10 dark:bg-[#8BA88E]/15 text-[#2C3E2D] dark:text-[#8BA88E] flex items-center justify-center">
+                      <Laptop className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#8BA88E]/20 text-[#2C3E2D] dark:text-[#8BA88E]">
+                      {totalLiteracyLessons} ta dars · 3 Oy
+                    </span>
+                  </div>
+                  <h4 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                    1. Kompyuter Savodxonligi
+                  </h4>
+                  <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1 leading-relaxed">
+                    Kompyuter arxitekturasi, Windows, klaviatura, Word, Excel, PowerPoint va xavfsiz internet.
+                  </p>
                 </div>
-
-                <h4 className="text-xl font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7] mb-2 group-hover:text-[#2C3E2D] dark:group-hover:text-[#8BA88E]">
-                  Kompyuter Savodxonligi Kursi
-                </h4>
-
-                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] leading-relaxed mb-5">
-                  Yagona IT silabusi: kompyuter qurilmalari, Windows muhiti, klaviatura trenajyori, Word, Excel, PowerPoint, xavfsiz internet va dasturlashga ilk qadamlar.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 mb-5 p-3.5 bg-[#FAF8F5] dark:bg-[#101712] rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Jami Darslar</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">{totalLiteracyLessons} ta dars</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">O'quv Davri</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">3 Oy (12 Hafta)</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Metodika</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">Kichik & Katta</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Materiallar</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">PDF & O'yinlar</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-[#EBE7DF] dark:border-[#243326]">
                 <button
                   onClick={() => onNavigateToTrack('literacy')}
-                  className="w-full py-3 bg-[#2C3E2D] dark:bg-[#344E37] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm"
+                  className="w-full py-2.5 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
                 >
-                  <span>Kurs Darslarini Ko'rish</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Rejani Ochish</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </div>
 
-            {/* COURSE 2: GRAFIK DIZAYN */}
-            <div className="bg-white dark:bg-[#152017] rounded-3xl p-6 md:p-7 border-2 border-[#EBE7DF] dark:border-[#243326] hover:border-[#8BA88E] dark:hover:border-[#8BA88E] hover:shadow-xl transition-all flex flex-col justify-between group relative">
-              <div className="absolute top-6 right-6">
-                <span className="bg-[#2C3E2D] dark:bg-[#344E37] text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                  Zamonaviy Soha
-                </span>
-              </div>
-
-              <div>
-                <div className="w-14 h-14 rounded-2xl bg-[#F5F5F0] dark:bg-[#111912] text-[#2C3E2D] dark:text-[#8BA88E] flex items-center justify-center mb-5 group-hover:bg-[#2C3E2D] group-hover:text-white transition-colors shadow-sm">
-                  <Palette className="w-7 h-7" />
+              {/* Plan 2: Grafik Dizayn (Canva & Figma) */}
+              <div className="bg-white dark:bg-[#152017] rounded-2xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col justify-between gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                      <Palette className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300">
+                      24 ta dars · 1–2 Modul
+                    </span>
+                  </div>
+                  <h4 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                    2. Grafik Dizayn (Canva & Figma)
+                  </h4>
+                  <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1 leading-relaxed">
+                    1-Modul: Canva brending va SMM dizayn (12 dars). 2-Modul: Figma UI/UX veb-dizayn va prototiplash (12 dars).
+                  </p>
                 </div>
-
-                <h4 className="text-xl font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7] mb-2 group-hover:text-[#2C3E2D] dark:group-hover:text-[#8BA88E]">
-                  Grafik Dizayn va Vizual San'at
-                </h4>
-
-                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] leading-relaxed mb-5">
-                  Vizual kompozitsiya, ranglar nazariyasi, Canva, Adobe Photoshop, Figma, logotip yaratish va Behance platformasida shaxsiy portfolio to'plash kursi.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 mb-5 p-3.5 bg-[#FAF8F5] dark:bg-[#101712] rounded-2xl border border-[#EBE7DF] dark:border-[#243326]">
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Darslar Soni</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">{totalDesignLessons} ta amaliy dars</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Asosiy Dasturlar</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">Canva, PS, Figma</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Yo'nalish</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">Vizual & UI/UX</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2] block">Yakuniy Mahsulot</span>
-                    <span className="text-sm font-bold text-[#2C3E2D] dark:text-[#E6EAE7]">Portfolio Keysi</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-[#EBE7DF] dark:border-[#243326]">
                 <button
                   onClick={() => onNavigateToTrack('design')}
-                  className="w-full py-3 bg-[#8BA88E] hover:bg-[#739076] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm"
+                  className="w-full py-2.5 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
                 >
-                  <span>Dizayn Kursini Ko'rish</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Dizayn Rejasini Ochish</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Plan 3: Frontend Dasturlash (HTML5 & CSS3) */}
+              <div className="bg-white dark:bg-[#152017] rounded-2xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col justify-between gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                      24 ta dars · 3–4 Modul
+                    </span>
+                  </div>
+                  <h4 className="text-base font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                    3. Frontend (HTML5 & CSS3)
+                  </h4>
+                  <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1 leading-relaxed">
+                    3-Modul: HTML5 semantikasi va formalar (12 dars). 4-Modul: CSS3, Flexbox, animatsiya va Responsive veb-sayt (12 dars).
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigateToTrack('design')}
+                  className="w-full py-2.5 bg-[#8BA88E] hover:bg-[#739076] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                >
+                  <span>Frontend Rejasini Ochish</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
-
-          </div>
+          ) : (
+            <LessonScheduleCalendar
+              appUser={{
+                role: 'teacher',
+                name: teacherName || 'Assadxoja',
+                email: 'assadxoja@school.uz',
+                uid: 'teacher_assadxoja',
+                selectedTrack: null,
+              }}
+              onSelectStudent={(studentName) => {
+                const found = students.find(
+                  (s) =>
+                    s.fullName.toLowerCase().includes(studentName.toLowerCase()) ||
+                    studentName.toLowerCase().includes(s.fullName.toLowerCase()) ||
+                    s.login.toLowerCase() === studentName.toLowerCase()
+                );
+                if (found) {
+                  setProfileViewingStudent(found);
+                }
+              }}
+              onSelectTrackLesson={onSelectStudentLesson}
+            />
+          )}
         </div>
       )}
 

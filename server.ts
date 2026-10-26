@@ -12,7 +12,10 @@ import {
   lessonRatingsTable,
   homeworkAssignmentsTable,
   homeworkSubmissionsTable,
-  smartCoinsTable
+  smartCoinsTable,
+  teachersTable,
+  teacherEvaluationsTable,
+  smsLogsTable
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { eq, and, desc } from 'drizzle-orm';
@@ -477,6 +480,18 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
     }
   });
 
+  // DELETE single rating
+  app.delete('/api/ratings/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(lessonRatingsTable).where(eq(lessonRatingsTable.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting rating:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // DELETE clear all ratings
   app.delete('/api/ratings', async (_req, res) => {
     try {
@@ -649,6 +664,251 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // TEACHERS & ADMIN EVALUATIONS API
+  // ---------------------------------------------------------------------------
+  app.get('/api/teachers', async (_req, res) => {
+    try {
+      const records = await db.select().from(teachersTable);
+      res.json({ teachers: records });
+    } catch (error: any) {
+      console.error('Error fetching teachers:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/teachers', async (req, res) => {
+    try {
+      const teacher = req.body;
+      if (!teacher.id || !teacher.login || !teacher.fullName || !teacher.password) {
+        return res.status(400).json({ error: "O'qituvchi ma'lumotlari to'liq emas" });
+      }
+      const existing = await db
+        .select()
+        .from(teachersTable)
+        .where(eq(teachersTable.id, teacher.id));
+      if (existing.length > 0) {
+        await db
+          .update(teachersTable)
+          .set(teacher)
+          .where(eq(teachersTable.id, teacher.id));
+      } else {
+        await db.insert(teachersTable).values(teacher);
+      }
+      res.json({ success: true, teacher });
+    } catch (error: any) {
+      console.error('Error saving teacher:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/teachers/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(teachersTable).where(eq(teachersTable.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting teacher:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/teacher-evaluations', async (_req, res) => {
+    try {
+      const records = await db
+        .select()
+        .from(teacherEvaluationsTable)
+        .orderBy(desc(teacherEvaluationsTable.evaluatedAt));
+      res.json({ evaluations: records });
+    } catch (error: any) {
+      console.error('Error fetching teacher evaluations:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/teacher-evaluations', async (req, res) => {
+    try {
+      const evaluation = req.body;
+      if (!evaluation.id || !evaluation.teacherId || typeof evaluation.score !== 'number') {
+        return res.status(400).json({ error: "Baholash ma'lumotlari to'liq emas" });
+      }
+      const existing = await db
+        .select()
+        .from(teacherEvaluationsTable)
+        .where(eq(teacherEvaluationsTable.id, evaluation.id));
+      if (existing.length > 0) {
+        await db
+          .update(teacherEvaluationsTable)
+          .set(evaluation)
+          .where(eq(teacherEvaluationsTable.id, evaluation.id));
+      } else {
+        await db.insert(teacherEvaluationsTable).values(evaluation);
+      }
+      res.json({ success: true, evaluation });
+    } catch (error: any) {
+      console.error('Error saving teacher evaluation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/teacher-evaluations/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(teacherEvaluationsTable).where(eq(teacherEvaluationsTable.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting teacher evaluation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // SMS REMINDER SYSTEM (30 minutes before lesson start)
+  // ---------------------------------------------------------------------------
+  async function dispatchSmsViaGateway(phone: string, message: string): Promise<string> {
+    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    if (process.env.SMS_GATEWAY_URL) {
+      try {
+        const resp = await fetch(process.env.SMS_GATEWAY_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.SMS_API_KEY ? { Authorization: `Bearer ${process.env.SMS_API_KEY}` } : {}),
+          },
+          body: JSON.stringify({ mobile_phone: cleanPhone, message, from: '4546' }),
+        });
+        if (resp.ok) return 'delivered';
+      } catch (e) {
+        console.warn('External SMS gateway error:', e);
+      }
+    }
+    return 'sent';
+  }
+
+  app.get('/api/sms-logs', async (_req, res) => {
+    try {
+      const logs = await db.select().from(smsLogsTable).orderBy(desc(smsLogsTable.sentAt));
+      res.json({ logs });
+    } catch (error: any) {
+      console.error('Error fetching SMS logs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/sms/send', async (req, res) => {
+    try {
+      const { studentId, studentName, phone, groupId, groupName, message, lessonDateKey } = req.body;
+      if (!phone || !message) {
+        return res.status(400).json({ error: 'Telefon raqami va xabar matni kiritilishi shart' });
+      }
+      const status = await dispatchSmsViaGateway(phone, message);
+      const record = {
+        id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        studentId: studentId || 'manual',
+        studentName: studentName || "O'quvchi",
+        phone,
+        groupId: groupId || 'manual',
+        groupName: groupName || 'Dars eslatmasi',
+        lessonDateKey: lessonDateKey || new Date().toISOString().slice(0, 10),
+        message,
+        status,
+        sentAt: new Date().toISOString(),
+      };
+      await db.insert(smsLogsTable).values(record);
+      res.json({ success: true, log: record });
+    } catch (error: any) {
+      console.error('Error sending SMS:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Server-side 30-minute Pre-Lesson Automatic SMS Scheduler
+  const SERVER_SCHEDULE_GROUPS = [
+    {
+      id: 'group_1',
+      name: '1-Guruh (10:00)',
+      timeSlot: '10:00 - 11:30',
+      startHour: 10,
+      startMinute: 0,
+      days: [1, 4, 0],
+      logins: ['shoxruz', 'abdurahmon', 'islomxoja', 'muso'],
+      room: '1-Xona',
+    },
+    {
+      id: 'group_2',
+      name: '2-Guruh (14:30)',
+      timeSlot: '14:30 - 16:00',
+      startHour: 14,
+      startMinute: 30,
+      days: [1, 2, 0],
+      logins: ['sultonxon', 'baxodir', 'dovud', 'fozilaxmad'],
+      room: '2-Xona',
+    },
+    {
+      id: 'group_3',
+      name: '3-Guruh (16:30)',
+      timeSlot: '16:30 - 18:00',
+      startHour: 16,
+      startMinute: 30,
+      days: [1, 2, 0],
+      logins: ['dilmurod', 'nafosat', 'abdulaziz', 'sunnatilla'],
+      room: '3-Xona',
+    },
+  ];
+
+  async function checkAndSendUpcomingLessonSms() {
+    try {
+      // Calculate current Tashkent time (UTC+5)
+      const now = new Date();
+      const tashkentTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tashkent' }));
+      const dayOfWeek = tashkentTime.getDay();
+      const currentMinutes = tashkentTime.getHours() * 60 + tashkentTime.getMinutes();
+      const dateKey = `${tashkentTime.getFullYear()}-${String(tashkentTime.getMonth() + 1).padStart(2, '0')}-${String(tashkentTime.getDate()).padStart(2, '0')}`;
+
+      const allStudents = await db.select().from(studentsTable);
+      const existingLogs = await db.select().from(smsLogsTable);
+
+      for (const grp of SERVER_SCHEDULE_GROUPS) {
+        if (!grp.days.includes(dayOfWeek)) continue;
+        const lessonStartMinutes = grp.startHour * 60 + grp.startMinute;
+        const diffMinutes = lessonStartMinutes - currentMinutes;
+
+        // Trigger if lesson starts in 25 to 32 minutes (30-minute reminder window)
+        if (diffMinutes >= 25 && diffMinutes <= 32) {
+          const groupStudents = allStudents.filter(
+            (s) => grp.logins.includes(s.login.toLowerCase()) && s.phone && s.phone.trim().length >= 7
+          );
+
+          for (const st of groupStudents) {
+            const lessonKey = `${grp.id}_${dateKey}_${st.id}`;
+            const alreadySent = existingLogs.some((l) => l.lessonDateKey === lessonKey);
+            if (!alreadySent && st.phone) {
+              const msg = `SMART HIGH SCHOOL: Hurmatli ${st.fullName}, sizning ${grp.name} darsingiz 30 daqiqadan so'ng (${grp.timeSlot}) ${grp.room}da boshlanadi. Darsga o'z vaqtida kelishingizni so'raymiz!`;
+              const status = await dispatchSmsViaGateway(st.phone, msg);
+              await db.insert(smsLogsTable).values({
+                id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                studentId: st.id,
+                studentName: st.fullName,
+                phone: st.phone,
+                groupId: grp.id,
+                groupName: grp.name,
+                lessonDateKey: lessonKey,
+                message: msg,
+                status,
+                sentAt: new Date().toISOString(),
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // Non-fatal background check
+    }
+  }
+
+  // Run automatic 30-min SMS check every 60 seconds
+  setInterval(checkAndSendUpcomingLessonSms, 60 * 1000);
+
   // Public static assets (manifest.json, icon.svg, sw.js)
   app.use(express.static(path.join(process.cwd(), 'public')));
 
@@ -675,3 +935,4 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
 startServer().catch((err) => {
   console.error('Failed to start full-stack server:', err);
 });
+

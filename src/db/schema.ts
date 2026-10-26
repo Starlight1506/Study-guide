@@ -150,4 +150,39 @@ export const smartCoinsTable = pgTable('smart_coins', {
   awardedAt: text('awarded_at').notNull(),
 });
 
+export const teachersTable = pgTable('teachers', {
+  id: text('id').primaryKey(),
+  fullName: text('full_name').notNull(),
+  login: text('login').notNull().unique(),
+  password: text('password').notNull(),
+  subject: text('subject').notNull().default('IT Savodxonlik & Grafik Dizayn'),
+  phone: text('phone'),
+  adminScore: integer('admin_score'),
+  adminFeedback: text('admin_feedback'),
+  createdAt: text('created_at').notNull(),
+});
 
+export const teacherEvaluationsTable = pgTable('teacher_evaluations', {
+  id: text('id').primaryKey(),
+  teacherId: text('teacher_id').notNull(),
+  teacherName: text('teacher_name').notNull(),
+  score: integer('score').notNull(),
+  maxScore: integer('max_score').notNull().default(100),
+  studentAvgRating: text('student_avg_rating'),
+  comment: text('comment').notNull(),
+  evaluatedBy: text('evaluated_by').notNull().default('Admin'),
+  evaluatedAt: text('evaluated_at').notNull(),
+});
+
+export const smsLogsTable = pgTable('sms_logs', {
+  id: text('id').primaryKey(),
+  studentId: text('student_id').notNull(),
+  studentName: text('student_name').notNull(),
+  phone: text('phone').notNull(),
+  groupId: text('group_id').notNull(),
+  groupName: text('group_name').notNull(),
+  lessonDateKey: text('lesson_date_key').notNull(),
+  message: text('message').notNull(),
+  status: text('status').notNull().default('sent'),
+  sentAt: text('sent_at').notNull(),
+});

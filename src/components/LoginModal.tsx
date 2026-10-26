@@ -16,10 +16,12 @@ import {
   authenticateStudent, 
   getStoredStudents, 
   authenticateTeacher, 
+  authenticateAdmin,
+  ADMIN_CREDENTIALS,
   TEACHER_CREDENTIALS 
 } from '../services/studentManager';
 
-export type UserRole = 'student' | 'teacher';
+export type UserRole = 'student' | 'teacher' | 'admin';
 
 export interface AppUser {
   uid: string;
@@ -64,17 +66,38 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // 1. Teacher Authentication (Only single teacher account)
+    // 0. Admin Authentication
+    if (selectedRole === 'admin') {
+      if (!authenticateAdmin(cleanInput, cleanPass)) {
+        setError("Admin logini yoki paroli noto'g'ri! (Standart login: admin | parol: Admin@2026#)");
+        return;
+      }
+
+      const adminUser: AppUser = {
+        uid: 'admin_main',
+        name: ADMIN_CREDENTIALS.name,
+        email: cleanInput,
+        role: 'admin',
+        selectedTrack: null,
+      };
+      localStorage.setItem('it_portal_user', JSON.stringify(adminUser));
+      onLoginSuccess(adminUser);
+      onClose();
+      return;
+    }
+
+    // 1. Teacher Authentication (Supports all teachers created/edited by Admin)
     if (selectedRole === 'teacher') {
-      if (!authenticateTeacher(cleanInput, cleanPass)) {
-        setError('O\'qituvchi logini yoki paroli noto\'g\'ri! Faqat ruxsat etilgan o\'qituvchi akkaunti orqali kirish mumkin.');
+      const matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      if (!matchedTeacher) {
+        setError('O\'qituvchi logini yoki paroli noto\'g\'ri! Admin bergan login va parolni kiriting.');
         return;
       }
 
       const teacherUser: AppUser = {
-        uid: 'teacher_assadxoja',
-        name: TEACHER_CREDENTIALS.name,
-        email: TEACHER_CREDENTIALS.login,
+        uid: matchedTeacher.id,
+        name: matchedTeacher.fullName,
+        email: matchedTeacher.login,
         role: 'teacher',
         selectedTrack: null,
       };
@@ -161,30 +184,42 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <label className="text-[11px] font-bold text-[#828282] dark:text-[#9FB1A2] uppercase tracking-wider block mb-2 text-center">
             Kim sifatida kirmoqchisiz?
           </label>
-          <div className="grid grid-cols-2 gap-2 bg-[#F5F5F0] dark:bg-[#18241B] p-1 rounded-2xl border border-[#EBE7DF] dark:border-[#283A2C]">
+          <div className="grid grid-cols-3 gap-1.5 bg-[#F5F5F0] dark:bg-[#18241B] p-1 rounded-2xl border border-[#EBE7DF] dark:border-[#283A2C]">
             <button
               type="button"
               onClick={() => { setSelectedRole('student'); setError(''); }}
-              className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 selectedRole === 'student'
                   ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
                   : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
               }`}
             >
-              <GraduationCap className="w-4 h-4" />
-              👨‍🎓 O'quvchi
+              <GraduationCap className="w-3.5 h-3.5" />
+              O'quvchi
             </button>
             <button
               type="button"
               onClick={() => { setSelectedRole('teacher'); setIsRegistering(false); setError(''); }}
-              className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 selectedRole === 'teacher'
                   ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
                   : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
               }`}
             >
-              <UserCheck className="w-4 h-4" />
-              👨‍🏫 O'qituvchi
+              <UserCheck className="w-3.5 h-3.5" />
+              O'qituvchi
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSelectedRole('admin'); setIsRegistering(false); setError(''); }}
+              className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                selectedRole === 'admin'
+                  ? 'bg-[#2C3E2D] dark:bg-[#2F4632] text-white shadow-md'
+                  : 'text-[#828282] dark:text-[#9FB1A2] hover:text-[#2D2D2D] dark:hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Admin
             </button>
           </div>
 
@@ -195,9 +230,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <p>
                 <strong>O'quvchi:</strong> O'qituvchingiz taqdim etgan login va parolni kiriting.
               </p>
+            ) : selectedRole === 'teacher' ? (
+              <p>
+                <strong>O'qituvchi:</strong> Admin tomonidan yaratilgan o'qituvchi login va paroli orqali kiring.
+              </p>
             ) : (
               <p>
-                <strong>O'qituvchi:</strong> Assadxoja o'qituvchi akkaunti orqali tizimga kiring.
+                <strong>Admin:</strong> O'qituvchilarga login/parol berish va anonim baholarni ko'rish (Login: <code className="font-mono font-bold">admin</code>, Parol: <code className="font-mono font-bold">Admin@2026#</code>).
               </p>
             )}
           </div>
@@ -229,7 +268,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
           <div>
             <label className="text-[11px] font-bold text-[#2C3E2D] dark:text-[#E6EAE7] block mb-1">
-              {selectedRole === 'teacher' ? "O'qituvchi Logini" : "O'quvchi Logini"}
+              {selectedRole === 'admin' ? 'Admin Logini' : selectedRole === 'teacher' ? "O'qituvchi Logini" : "O'quvchi Logini"}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-[#828282] dark:text-[#9FB1A2] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -237,7 +276,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={selectedRole === 'teacher' ? 'Assadxoja' : 'Loginni kiriting'}
+                placeholder={selectedRole === 'admin' ? 'admin' : selectedRole === 'teacher' ? 'Assadxoja' : 'Loginni kiriting'}
                 className="w-full pl-10 pr-3 py-2.5 bg-[#FDFBF7] dark:bg-[#162218] border border-[#EBE7DF] dark:border-[#283A2C] text-[#2D2D2D] dark:text-[#E6EAE7] rounded-xl text-xs focus:outline-none focus:border-[#8BA88E] focus:ring-2 focus:ring-[#8BA88E]/20 font-mono"
               />
             </div>
