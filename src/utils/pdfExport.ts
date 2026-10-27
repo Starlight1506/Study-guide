@@ -22,7 +22,7 @@ export async function exportLessonToPdf({
   container.style.top = '-9999px';
   container.style.width = '800px';
   container.style.backgroundColor = '#ffffff';
-  container.style.fontFamily = 'serif, system-ui, -apple-system, sans-serif';
+  container.style.fontFamily = 'Arial, Helvetica, sans-serif';
   container.style.color = '#1A2E1C';
   container.style.padding = '40px';
   container.style.boxSizing = 'border-box';

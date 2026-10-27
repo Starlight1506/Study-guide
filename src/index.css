@@ -1,12 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Lora", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-serif: Arial, Helvetica, sans-serif;
+  --font-display: Arial, Helvetica, sans-serif;
+  --font-mono: Arial, Helvetica, sans-serif;
   
   --color-natural-cream: #FDFBF7;
   --color-natural-dark: #2C3E2D;
@@ -34,8 +34,22 @@
   color-scheme: dark;
 }
 
+body,
+button,
+input,
+select,
+textarea,
+.font-sans,
+.font-serif,
+.font-mono {
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
+.font-serif.italic {
+  font-style: normal;
+}
+
 body {
-  font-family: var(--font-sans);
   background-color: var(--color-natural-cream);
   color: var(--color-natural-text);
   transition: background-color 0.25s ease, color 0.25s ease;

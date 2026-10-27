@@ -250,28 +250,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 Admin
               </button>
             </div>
-
-            {/* Quick explanation of role */}
-            <div className="mt-3 p-3 bg-[#FAF8F5] dark:bg-[#121A13] rounded-xl border border-[#EBE7DF] dark:border-[#243326] text-[11px] text-[#2C3E2D] dark:text-[#D4DFD6] flex items-center gap-2.5">
-              {selectedRole === 'student' ? (
-                <>
-                  <KeyRound className="w-4 h-4 text-[#8BA88E] shrink-0" />
-                  <span><strong>O'quvchi:</strong> O'qituvchi bergan login va parol orqali kiring va baholaringizni ko'ring.</span>
-                </>
-              ) : selectedRole === 'teacher' ? (
-                <>
-                  <Palette className="w-4 h-4 text-[#8BA88E] shrink-0" />
-                  <span><strong>O'qituvchi:</strong> Admin bergan login/parol orqali kiring va har dars bo'yicha ball qo'ying.</span>
-                </>
-              ) : (
-                <>
-                  <Shield className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>
-                    <strong>Admin:</strong> O'qituvchi login/parolini boshqarish va anonim baholarni ko'rish (Login: <code className="font-mono font-bold">admin</code> | Parol: <code className="font-mono font-bold">Admin@2026#</code>).
-                  </span>
-                </>
-              )}
-            </div>
           </div>
 
           {/* Form */}
