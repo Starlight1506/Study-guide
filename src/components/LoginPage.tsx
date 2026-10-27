@@ -70,7 +70,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     // Check if Admin login
     if (selectedRole === 'admin') {
       if (!authenticateAdmin(cleanInput, cleanPass)) {
-        setError("Admin logini yoki paroli noto'g'ri! (Standart login: admin | parol: Admin@2026#)");
+        setError("Admin logini yoki paroli noto'g'ri! Iltimos, ma'lumotlarni tekshirib qayta urinib ko'ring.");
         return;
       }
       const user: AppUser = {
@@ -278,7 +278,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
             <div>
               <label className="text-[11px] font-bold text-[#2C3E2D] dark:text-[#D4DFD6] block mb-1">
-                {selectedRole === 'student' ? "O'quvchi Logini (Foydalanuvchi nomi)" : "O'qituvchi Logini yoki Email"}
+                {selectedRole === 'student'
+                  ? "O'quvchi Logini (Foydalanuvchi nomi)"
+                  : selectedRole === 'admin'
+                  ? 'Admin Logini'
+                  : "O'qituvchi Logini yoki Email"}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-[#828282] dark:text-[#8FA592] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -286,7 +290,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={selectedRole === 'teacher' ? 'ustoz@savod.uz' : 'Masalan: azizbek2026'}
+                  placeholder={
+                    selectedRole === 'admin'
+                      ? 'Admin loginingizni kiriting'
+                      : selectedRole === 'teacher'
+                      ? "O'qituvchi loginingizni kiriting"
+                      : 'Masalan: sultonxon'
+                  }
                   className="w-full pl-10 pr-3 py-2.5 bg-[#FDFBF7] dark:bg-[#121A14] border border-[#EBE7DF] dark:border-[#2C3E2D] rounded-xl text-xs text-[#2D2D2D] dark:text-[#E6EAE7] placeholder-[#828282] dark:placeholder-[#6C7E70] focus:outline-none focus:border-[#8BA88E] focus:ring-2 focus:ring-[#8BA88E]/20 font-mono"
                 />
               </div>

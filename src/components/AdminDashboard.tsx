@@ -24,7 +24,19 @@ import {
   Lock,
   Layers,
   BellRing,
+  Mail,
+  LogOut,
 } from 'lucide-react';
+import { User } from 'firebase/auth';
+import {
+  initAuth,
+  googleSignIn,
+  hasCachedAccessToken,
+  logout as googleLogout,
+  sendGmailReminder,
+  getBackendGmailStatus,
+  BackendGmailStatus,
+} from '../lib/firebase';
 import {
   TeacherAccount,
   TeacherEvaluation,
@@ -49,6 +61,24 @@ import {
 import { SCHEDULE_GROUPS } from '../services/scheduleManager';
 import { UNIFIED_CURRICULUM } from '../data/curriculum';
 import { DESIGN_CURRICULUM } from '../data/designCurriculum';
+
+interface GmailRecipientItem {
+  student: StudentAccount;
+  email: string;
+  phone?: string;
+  groupId: string;
+  groupName: string;
+  timeSlot: string;
+  room: string;
+  subject: string;
+  message: string;
+}
+
+interface PendingGmailConfirmation {
+  title: string;
+  includeSms: boolean;
+  items: GmailRecipientItem[];
+}
 
 interface AdminDashboardProps {
   adminName?: string;
@@ -99,14 +129,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [ratingStarFilter, setRatingStarFilter] = useState<string>('all');
   const [ratingSearch, setRatingSearch] = useState<string>('');
 
-  // SMS & Phone management state
+  // SMS & Google Account (Gmail) management state
   const [editingPhoneStudentId, setEditingPhoneStudentId] = useState<string | null>(null);
   const [phoneInputVal, setPhoneInputVal] = useState<string>('');
+  const [editingEmailStudentId, setEditingEmailStudentId] = useState<string | null>(null);
+  const [emailInputVal, setEmailInputVal] = useState<string>('');
   const [sendingSmsId, setSendingSmsId] = useState<string | null>(null);
+
+  // Google OAuth & Backend Gmail/SMTP state
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [needsGoogleAuth, setNeedsGoogleAuth] = useState<boolean>(false);
+  const [hasGoogleToken, setHasGoogleToken] = useState<boolean>(hasCachedAccessToken());
+  const [backendGmailStatus, setBackendGmailStatus] = useState<BackendGmailStatus | null>(null);
+  const [pendingGmailConfirm, setPendingGmailConfirm] = useState<PendingGmailConfirmation | null>(null);
+  const [isSendingGmail, setIsSendingGmail] = useState<boolean>(false);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  const refreshBackendGmailStatus = async () => {
+    const st = await getBackendGmailStatus();
+    if (st) setBackendGmailStatus(st);
   };
 
   const refreshAll = () => {
@@ -120,6 +165,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setRatings(rList);
     setStudents(sList);
     setSmsLogs(lList);
+    void refreshBackendGmailStatus();
 
     if (tList.length > 0 && !selectedTeacherId) {
       setSelectedTeacherId(tList[0].id);
@@ -131,11 +177,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   useEffect(() => {
     refreshAll();
+    const unsubscribeAuth = initAuth((u) => {
+      setGoogleUser(u);
+      setHasGoogleToken(hasCachedAccessToken());
+      void refreshBackendGmailStatus();
+    });
     window.addEventListener('teachers_updated', refreshAll);
     window.addEventListener('teacher_evals_updated', refreshAll);
     window.addEventListener('lesson_ratings_updated', refreshAll);
     window.addEventListener('sms_logs_updated', refreshAll);
     return () => {
+      unsubscribeAuth();
       window.removeEventListener('teachers_updated', refreshAll);
       window.removeEventListener('teacher_evals_updated', refreshAll);
       window.removeEventListener('lesson_ratings_updated', refreshAll);
@@ -300,8 +352,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast(`${student.fullName} telefon raqami saqlandi!`);
   };
 
-  // Send 30-min Reminder SMS to single student or entire group
-  const handleSend30MinSmsToStudent = async (student: StudentAccount, groupName: string, timeSlot: string, room: string) => {
+  // Save Student Google Email
+  const handleSaveStudentEmail = (student: StudentAccount) => {
+    const cleanEmail = emailInputVal.trim();
+    updateStudent(student.id, { googleEmail: cleanEmail });
+    setEditingEmailStudentId(null);
+    refreshAll();
+    showToast(`${student.fullName} Google (Gmail) manzili saqlandi!`);
+  };
+
+  // Connect Google Account for Gmail API
+  const handleConnectGoogle = async () => {
+    try {
+      const { user, accessToken } = await googleSignIn();
+      setGoogleUser(user);
+      setHasGoogleToken(Boolean(accessToken));
+      setNeedsGoogleAuth(false);
+      await refreshBackendGmailStatus();
+      showToast(`Google hisobi server bilan sinxronlandi: ${user.email || user.displayName}`);
+    } catch (err: any) {
+      showToast(`Google orqali ulanish bekor qilindi yoki xatolik yuz berdi.`);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    await googleLogout();
+    setGoogleUser(null);
+    setHasGoogleToken(false);
+    setNeedsGoogleAuth(false);
+    await refreshBackendGmailStatus();
+    showToast('Google hisobi uzildi.');
+  };
+
+  // Send 30-min Reminder SMS to single student
+  const handleSend30MinSmsToStudent = async (
+    student: StudentAccount,
+    groupName: string,
+    timeSlot: string,
+    room: string
+  ) => {
     if (!student.phone || student.phone.trim().length < 7) {
       showToast(`Avval ${student.fullName} uchun telefon raqam kiriting!`);
       setEditingPhoneStudentId(student.id);
@@ -314,6 +403,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       studentId: student.id,
       studentName: student.fullName,
       phone: student.phone,
+      channel: 'sms',
       groupId: groupName,
       groupName,
       message: msg,
@@ -323,6 +413,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast(`${student.fullName} (${student.phone}) raqamiga SMS yuborildi!`);
   };
 
+  // Prepare Confirmation Modal for Gmail (or SMS + Gmail) to single student
+  const handleRequestGmailToStudent = (
+    student: StudentAccount,
+    groupId: string,
+    groupName: string,
+    timeSlot: string,
+    room: string,
+    includeSms: boolean
+  ) => {
+    if (!student.googleEmail || !student.googleEmail.includes('@')) {
+      showToast(`Avval ${student.fullName} uchun Google (Gmail) manzilini kiriting!`);
+      setEditingEmailStudentId(student.id);
+      setEmailInputVal(`${student.login}@gmail.com`);
+      return;
+    }
+    if (includeSms && (!student.phone || student.phone.trim().length < 7)) {
+      showToast(`SMS + Google yuborish uchun ${student.fullName}ning telefon raqami ham kiritilgan bo'lishi kerak!`);
+      setEditingPhoneStudentId(student.id);
+      setPhoneInputVal('+998 90 ');
+      return;
+    }
+
+    const subject = `SMART HIGH SCHOOL: ${groupName} darsi 30 daqiqadan so'ng boshlanadi!`;
+    const message = `SMART HIGH SCHOOL — Dars Eslatmasi (30 daqiqa oldin)\n\nHurmatli ${student.fullName}!\nSizning "${groupName}" guruhidagi IT va Dizayn darsingiz 30 daqiqadan so'ng (${timeSlot}) ${room}da boshlanadi.\n\nIltimos, darsga o'z vaqtida tayyor bo'lib kelishingizni so'raymiz!`;
+
+    setPendingGmailConfirm({
+      title: includeSms
+        ? `${student.fullName}ga 30-daqiqalik SMS + Google (Gmail) xabarnoma yuborish`
+        : `${student.fullName}ning Google (Gmail) hisobiga 30-daqiqalik xabarnoma yuborish`,
+      includeSms,
+      items: [
+        {
+          student,
+          email: student.googleEmail.trim(),
+          phone: student.phone?.trim(),
+          groupId,
+          groupName,
+          timeSlot,
+          room,
+          subject,
+          message,
+        },
+      ],
+    });
+  };
+
+  // Send SMS-only to entire group
   const handleSendGroupSms = async (groupId: string) => {
     const grp = SCHEDULE_GROUPS.find((g) => g.id === groupId);
     if (!grp) return;
@@ -343,6 +480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         studentId: st.id,
         studentName: st.fullName,
         phone: st.phone!,
+        channel: 'sms',
         groupId: grp.id,
         groupName: grp.name,
         message: msg,
@@ -352,6 +490,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     refreshAll();
     showToast(`${grp.name}dagi ${withPhone.length} nafar o'quvchiga 30 daqiqalik SMS yuborildi!`);
   };
+
+  // Prepare Confirmation Modal for Group Gmail or Group SMS + Gmail
+  const handleRequestGroupGmail = (groupId: string, includeSms: boolean) => {
+    const grp = SCHEDULE_GROUPS.find((g) => g.id === groupId);
+    if (!grp) return;
+    const grpStudents = students.filter(
+      (s) =>
+        grp.studentLogins.includes(s.login.toLowerCase()) ||
+        grp.studentNames.some((n) => n.toLowerCase() === s.fullName.toLowerCase())
+    );
+    const withEmail = grpStudents.filter((s) => s.googleEmail && s.googleEmail.includes('@'));
+    if (withEmail.length === 0) {
+      showToast(`${grp.name} o'quvchilariga avval Google (Gmail) manzillarini biriktiring!`);
+      return;
+    }
+
+    const items: GmailRecipientItem[] = withEmail.map((st) => ({
+      student: st,
+      email: st.googleEmail!.trim(),
+      phone: st.phone?.trim(),
+      groupId: grp.id,
+      groupName: grp.name,
+      timeSlot: grp.timeSlot,
+      room: grp.room,
+      subject: `SMART HIGH SCHOOL: ${grp.name} darsi 30 daqiqadan so'ng boshlanadi!`,
+      message: `SMART HIGH SCHOOL — Dars Eslatmasi (30 daqiqa oldin)\n\nHurmatli ${st.fullName}!\nSizning "${grp.name}" guruhidagi darsingiz 30 daqiqadan so'ng (${grp.timeSlot}) ${grp.room}da boshlanadi.\n\nIltimos, darsga kechikmasdan kelishingizni so'raymiz!`,
+    }));
+
+    setPendingGmailConfirm({
+      title: includeSms
+        ? `${grp.name} o'quvchilariga 30-daqiqalik SMS + Google (Gmail) yuborish`
+        : `${grp.name} o'quvchilarining Google (Gmail) hisoblariga xabar yuborish`,
+      includeSms,
+      items,
+    });
+  };
+
+  // Execute confirmed Gmail (and optional SMS) dispatch
+  const handleConfirmAndSendGmail = async () => {
+    if (!pendingGmailConfirm) return;
+    setIsSendingGmail(true);
+    try {
+      let sentCount = 0;
+      for (const item of pendingGmailConfirm.items) {
+        await sendGmailReminder({
+          to: item.email,
+          subject: item.subject,
+          bodyText: item.message,
+          studentName: item.student.fullName,
+          groupName: item.groupName,
+          timeSlot: item.timeSlot,
+          room: item.room,
+        });
+
+        const hasValidPhone = Boolean(item.phone && item.phone.length >= 7);
+        const shouldSendSms = pendingGmailConfirm.includeSms && hasValidPhone;
+
+        await sendStudentSms({
+          studentId: item.student.id,
+          studentName: item.student.fullName,
+          phone: shouldSendSms ? item.phone! : item.email,
+          googleEmail: item.email,
+          channel: shouldSendSms ? 'both' : 'gmail',
+          groupId: item.groupId,
+          groupName: item.groupName,
+          message: item.message,
+        });
+        sentCount++;
+      }
+
+      setHasGoogleToken(hasCachedAccessToken());
+      setNeedsGoogleAuth(false);
+      setPendingGmailConfirm(null);
+      refreshAll();
+      showToast(
+        pendingGmailConfirm.includeSms
+          ? `${sentCount} nafar o'quvchiga ham SMS, ham Google (Gmail) xabari yuborildi!`
+          : `${sentCount} nafar o'quvchining Google (Gmail) akkauntiga xabar yuborildi!`
+      );
+    } catch (err: any) {
+      if (err?.message === 'NEEDS_AUTH') {
+        setNeedsGoogleAuth(true);
+        setHasGoogleToken(false);
+        showToast("Google hisobingiz orqali qayta avtorizatsiyadan o'ting (Sign in with Google).");
+      } else {
+        showToast(`Gmail yuborishda xatolik: ${err?.message || "Noma'lum xato"}`);
+      }
+    } finally {
+      setIsSendingGmail(false);
+    }
+  };
+
+  // Automatic 30-minute Pre-Lesson Watcher (checks if a group's lesson is 25-32 mins away)
+  useEffect(() => {
+    const checkUpcomingGroupForGmail = () => {
+      if (pendingGmailConfirm) return;
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const dateKey = now.toISOString().slice(0, 10);
+
+      for (const grp of SCHEDULE_GROUPS) {
+        if (!grp.daysOfWeek.includes(dayOfWeek)) continue;
+        const startMins = grp.startHour * 60 + grp.startMinute;
+        const diff = startMins - currentMinutes;
+        if (diff >= 25 && diff <= 32) {
+          const autoFlagKey = `auto_prompt_${grp.id}_${dateKey}`;
+          if (sessionStorage.getItem(autoFlagKey)) continue;
+
+          const grpStudents = students.filter(
+            (s) =>
+              (grp.studentLogins.includes(s.login.toLowerCase()) ||
+                grp.studentNames.some((n) => n.toLowerCase() === s.fullName.toLowerCase())) &&
+              s.googleEmail &&
+              s.googleEmail.includes('@')
+          );
+
+          if (grpStudents.length > 0) {
+            sessionStorage.setItem(autoFlagKey, 'true');
+            handleRequestGroupGmail(grp.id, true);
+            break;
+          }
+        }
+      }
+    };
+
+    const timer = setInterval(checkUpcomingGroupForGmail, 60000);
+    return () => clearInterval(timer);
+  }, [students, pendingGmailConfirm]);
 
   return (
     <div className="flex flex-col gap-6 relative">
@@ -374,7 +641,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             SMART HIGH SCHOOL — Admin Markazi
           </h2>
           <p className="text-xs text-[#A7C2AA] mt-1">
-            O'qituvchilarga login/parol yaratish va tahrirlash, o'quvchilarning anonim 1–5 yulduzli baholarini ko'rib baho qo'yish hamda 30 daqiqalik SMS tizimi.
+            O'qituvchilarga login/parol yaratish va tahrirlash, o'quvchilarning anonim 1–5 yulduzli baholarini ko'rib baho qo'yish hamda 30 daqiqalik SMS + Google (Gmail) tizimi.
           </p>
         </div>
 
@@ -390,7 +657,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </span>
           </div>
           <div className="bg-white/10 backdrop-blur-xs px-3.5 py-2.5 rounded-2xl border border-emerald-400/30 text-center">
-            <span className="text-[10px] text-emerald-300 uppercase font-bold block">Avto-SMS (30m)</span>
+            <span className="text-[10px] text-emerald-300 uppercase font-bold block">SMS + Gmail (30m)</span>
             <span className="text-lg font-serif italic font-bold text-emerald-300">Faol ✓</span>
           </div>
         </div>
@@ -435,9 +702,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <BellRing className="w-4 h-4 text-emerald-400" />
-          <span>3. Reja & 30-Daqiqalik SMS Tizimi</span>
+          <span>3. Reja & 30-Daqiqalik SMS + Google Tizimi</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-400/25 text-emerald-300">
-            {smsLogs.length} SMS
+            {smsLogs.length} xabar
           </span>
         </button>
       </div>
@@ -999,23 +1266,107 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ===================================================================== */}
-      {/* TAB 3: REJA & 30-DAQIQALIK AVTO-SMS XABARNOMA TIZIMI                  */}
+      {/* TAB 3: REJA & 30-DAQIQALIK AVTO-SMS VA GOOGLE (GMAIL) XABARNOMA TIZIMI */}
       {/* ===================================================================== */}
       {activeTab === 'sms_schedule' && (
         <div className="flex flex-col gap-6">
-          {/* 30-Min Auto SMS Explanation & Group Cards */}
+          {/* Google Workspace (Gmail) Connection Bar */}
+          <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                    Google Gmail API va Server-Side SMTP Integratsiyasi (30 daq. oldin)
+                  </h4>
+                  {(googleUser && hasGoogleToken && !needsGoogleAuth) || backendGmailStatus?.ready ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                      ✓ Server Faol:{' '}
+                      {googleUser?.email ||
+                        backendGmailStatus?.senderEmail ||
+                        (backendGmailStatus?.smtpConfigured ? 'SMTP (smtp.gmail.com)' : 'Gmail API')}
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                      Google OAuth avtorizatsiyasi kutilmoqda
+                    </span>
+                  )}
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                    ⏱️ Backend Cron: Har 60 soniyada (Darsdan 30 daq. oldin)
+                  </span>
+                </div>
+                <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-1">
+                  Server (backend) qismida <strong>Gmail REST API</strong> hamda <strong>SMTP (smtp.gmail.com)</strong> xizmati sozlangan. Dars boshlanishidan 30 daqiqa oldin o'quvchilarning telefon raqamiga SMS va Google (Gmail) manziliga rasmiy xabarnoma avtomatik yuboriladi.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {googleUser && hasGoogleToken && !needsGoogleAuth ? (
+                <button
+                  type="button"
+                  onClick={handleDisconnectGoogle}
+                  className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-300 text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Google hisobni uzish</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConnectGoogle}
+                  className="gsi-material-button"
+                >
+                  <div className="gsi-material-button-state"></div>
+                  <div className="gsi-material-button-content-wrapper">
+                    <div className="gsi-material-button-icon">
+                      <svg
+                        version="1.1"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 48 48"
+                        style={{ display: 'block' }}
+                      >
+                        <path
+                          fill="#EA4335"
+                          d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                        ></path>
+                        <path
+                          fill="#4285F4"
+                          d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                        ></path>
+                        <path
+                          fill="#FBBC05"
+                          d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                        ></path>
+                        <path
+                          fill="#34A853"
+                          d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                        ></path>
+                        <path fill="none" d="M0 0h48v48H0z"></path>
+                      </svg>
+                    </div>
+                    <span className="gsi-material-button-contents">Sign in with Google</span>
+                  </div>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 30-Min Auto SMS & Google Account Explanation & Group Cards */}
           <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 md:p-6 border border-[#EBE7DF] dark:border-[#243326] flex flex-col gap-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-[#EBE7DF] dark:border-[#243326]">
               <div>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 mb-1">
                   <BellRing className="w-3 h-3" />
-                  Avtomatik SMS Xabarnoma Tizimi (Darsdan 30 daqiqa oldin)
+                  30 Daqiqa Oldin SMS va Google Akkaunt (Gmail) Xabarnoma Tizimi
                 </span>
                 <h3 className="text-lg font-serif italic font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
-                  Guruhlar Dars Rejasi va O'quvchilar Telefon Raqamlari
+                  Guruhlar Dars Rejasi, Telefon Raqamlari va Google (Gmail) Manzillari
                 </h3>
                 <p className="text-xs text-[#828282] dark:text-[#9FB1A2] mt-0.5">
-                  Har bir guruh darsi boshlanishiga роппа-rosa 30 daqiqa qolganda tizim o'quvchilarning telefon raqamlariga avtomatik SMS eslatma yuboradi.
+                  Har bir guruh darsi boshlanishiga 30 daqiqa qolganda o'quvchilarning telefon raqamlariga SMS hamda Google akkauntlariga (Gmail) eslatma xabar yuboriladi.
                 </p>
               </div>
             </div>
@@ -1043,7 +1394,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-[#828282] dark:text-[#9FB1A2] mb-3">
-                        Kunlar: <strong>{grp.dayNames.join(', ')}</strong> · SMS vaqti:{' '}
+                        Kunlar: <strong>{grp.dayNames.join(', ')}</strong> · Eslatma vaqti:{' '}
                         <strong className="text-emerald-600 dark:text-emerald-400">
                           {grp.startMinute === 30
                             ? `${String(grp.startHour).padStart(2, '0')}:00`
@@ -1052,32 +1403,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </strong>
                       </p>
 
-                      {/* Students in this group with phone inputs */}
-                      <div className="flex flex-col gap-2">
+                      {/* Students in this group with phone & Google email inputs */}
+                      <div className="flex flex-col gap-2.5">
                         {grpStudents.map((st) => (
                           <div
                             key={st.id}
-                            className="p-2.5 rounded-xl bg-white dark:bg-[#162118] border border-[#EBE7DF] dark:border-[#243326] flex flex-col gap-1.5 text-xs"
+                            className="p-2.5 rounded-xl bg-white dark:bg-[#162118] border border-[#EBE7DF] dark:border-[#243326] flex flex-col gap-2 text-xs"
                           >
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center justify-between gap-1.5 flex-wrap">
                               <span className="font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
                                 {st.fullName}
                               </span>
-                              <button
-                                type="button"
-                                disabled={sendingSmsId === st.id}
-                                onClick={() =>
-                                  handleSend30MinSmsToStudent(st, grp.name, grp.timeSlot, grp.room)
-                                }
-                                className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold flex items-center gap-1 transition"
-                              >
-                                <Send className="w-2.5 h-2.5" />
-                                <span>{sendingSmsId === st.id ? 'Yuborilmoqda...' : 'SMS'}</span>
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={sendingSmsId === st.id}
+                                  onClick={() =>
+                                    handleSend30MinSmsToStudent(st, grp.name, grp.timeSlot, grp.room)
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold flex items-center gap-1 transition"
+                                  title="Telefon raqamiga SMS yuborish"
+                                >
+                                  <Phone className="w-2.5 h-2.5" />
+                                  <span>{sendingSmsId === st.id ? '...' : 'SMS'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRequestGmailToStudent(st, grp.id, grp.name, grp.timeSlot, grp.room, false)
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 text-[10px] font-bold flex items-center gap-1 transition"
+                                  title="Google (Gmail) akkauntiga xabar yuborish"
+                                >
+                                  <Mail className="w-2.5 h-2.5" />
+                                  <span>Google</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRequestGmailToStudent(st, grp.id, grp.name, grp.timeSlot, grp.room, true)
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white text-[10px] font-bold flex items-center gap-1 transition"
+                                  title="Ham SMS, ham Google (Gmail) orqali yuborish"
+                                >
+                                  <Send className="w-2.5 h-2.5 text-amber-300" />
+                                  <span>SMS+Google</span>
+                                </button>
+                              </div>
                             </div>
 
+                            {/* Phone Row */}
                             {editingPhoneStudentId === st.id ? (
-                              <div className="flex items-center gap-1.5 mt-1">
+                              <div className="flex items-center gap-1.5">
                                 <input
                                   type="text"
                                   value={phoneInputVal}
@@ -1095,8 +1472,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </div>
                             ) : (
                               <div className="flex items-center justify-between text-[11px] text-[#828282] dark:text-[#9FB1A2]">
-                                <span className="font-mono flex items-center gap-1">
-                                  <Phone className="w-3 h-3 text-[#8BA88E]" />
+                                <span className="font-mono flex items-center gap-1 truncate">
+                                  <Phone className="w-3 h-3 text-[#8BA88E] shrink-0" />
                                   {st.phone || 'Raqam kiritilmagan'}
                                 </span>
                                 <button
@@ -1105,9 +1482,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     setEditingPhoneStudentId(st.id);
                                     setPhoneInputVal(st.phone || '+998 ');
                                   }}
-                                  className="text-[10px] text-[#8BA88E] font-bold hover:underline"
+                                  className="text-[10px] text-[#8BA88E] font-bold hover:underline shrink-0"
                                 >
                                   {st.phone ? "O'zgartirish" : '+ Raqam'}
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Google Account (Gmail) Row */}
+                            {editingEmailStudentId === st.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="email"
+                                  value={emailInputVal}
+                                  onChange={(e) => setEmailInputVal(e.target.value)}
+                                  placeholder="oquvchi@gmail.com"
+                                  className="flex-1 px-2 py-1 rounded border border-blue-400 bg-[#FAF8F5] dark:bg-[#111A13] text-[11px] font-mono"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveStudentEmail(st)}
+                                  className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-bold"
+                                >
+                                  Saqlash
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between text-[11px] text-[#828282] dark:text-[#9FB1A2] pt-1 border-t border-[#EBE7DF]/60 dark:border-[#243326]">
+                                <span className="font-mono flex items-center gap-1 truncate">
+                                  <Mail className="w-3 h-3 text-blue-500 shrink-0" />
+                                  {st.googleEmail || 'Google email kiritilmagan'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingEmailStudentId(st.id);
+                                    setEmailInputVal(st.googleEmail || `${st.login}@gmail.com`);
+                                  }}
+                                  className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline shrink-0"
+                                >
+                                  {st.googleEmail ? "O'zgartirish" : '+ Gmail'}
                                 </button>
                               </div>
                             )}
@@ -1116,60 +1530,218 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={sendingSmsId === grp.id}
-                      onClick={() => handleSendGroupSms(grp.id)}
-                      className="w-full py-2.5 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
-                    >
-                      <Send className="w-3.5 h-3.5 text-emerald-300" />
-                      <span>
-                        {sendingSmsId === grp.id
-                          ? 'Yuborilmoqda...'
-                          : `${grp.shortName}ga 30-daq. SMS Yuborish`}
-                      </span>
-                    </button>
+                    <div className="flex flex-col gap-1.5 pt-2 border-t border-[#EBE7DF] dark:border-[#243326]">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          disabled={sendingSmsId === grp.id}
+                          onClick={() => handleSendGroupSms(grp.id)}
+                          className="py-2 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>{sendingSmsId === grp.id ? '...' : 'Guruhga SMS'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRequestGroupGmail(grp.id, false)}
+                          className="py-2 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1"
+                        >
+                          <Mail className="w-3 h-3" />
+                          <span>Guruhga Gmail</span>
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRequestGroupGmail(grp.id, true)}
+                        className="w-full py-2.5 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      >
+                        <Send className="w-3.5 h-3.5 text-amber-300" />
+                        <span>{grp.shortName}ga 30-daq. SMS + Google Yuborish</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Sent SMS Logs */}
+          {/* Sent SMS & Google Logs */}
           <div className="bg-white dark:bg-[#152017] rounded-3xl p-5 border border-[#EBE7DF] dark:border-[#243326] flex flex-col gap-3">
             <h4 className="font-serif italic text-base font-bold text-[#1A2E1C] dark:text-[#E6EAE7] flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-emerald-500" />
-              Yuborilgan SMS Xabarnomalar Jurnali ({smsLogs.length})
+              Yuborilgan SMS va Google (Gmail) Xabarnomalar Jurnali ({smsLogs.length})
             </h4>
             {smsLogs.length === 0 ? (
               <p className="text-xs text-[#828282] dark:text-[#9FB1A2] py-6 text-center">
-                Hozircha SMS xabarlar yuborilmagan. Darsga 30 daqiqa qolganda avtomatik yuboriladi yoki yuqoridagi tugma orqali sinab ko'rishingiz mumkin.
+                Hozircha xabarnomalar yuborilmagan. Darsga 30 daqiqa qolganda avtomatik eslatiladi yoki yuqoridagi tugmalar orqali yuborishingiz mumkin.
               </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
-                {smsLogs.slice(0, 20).map((log) => (
-                  <div
-                    key={log.id}
-                    className="p-3.5 rounded-2xl bg-[#FAF8F5] dark:bg-[#111A13] border border-[#EBE7DF] dark:border-[#243326] flex flex-col gap-1.5 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
-                        {log.studentName} ({log.phone})
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                        ✓ Yuborildi
+                {smsLogs.slice(0, 20).map((log) => {
+                  const isBoth = log.channel === 'both' || log.phone.includes('|');
+                  const isGmailOnly = log.channel === 'gmail' || (!isBoth && log.phone.includes('@'));
+                  return (
+                    <div
+                      key={log.id}
+                      className="p-3.5 rounded-2xl bg-[#FAF8F5] dark:bg-[#111A13] border border-[#EBE7DF] dark:border-[#243326] flex flex-col gap-1.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-[#1A2E1C] dark:text-[#E6EAE7] truncate">
+                          {log.studentName} ({log.phone})
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            isBoth
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                              : isGmailOnly
+                              ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                              : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                          }`}
+                        >
+                          {isBoth ? '✓ SMS + Google' : isGmailOnly ? '✓ Google (Gmail)' : '✓ SMS Yuborildi'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#2D2D2D] dark:text-[#D4DFD6] leading-relaxed whitespace-pre-line">
+                        {log.message}
+                      </p>
+                      <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2]">
+                        {log.groupName} · {new Date(log.sentAt).toLocaleString('uz-UZ')}
                       </span>
                     </div>
-                    <p className="text-[11px] text-[#2D2D2D] dark:text-[#D4DFD6] leading-relaxed">
-                      {log.message}
-                    </p>
-                    <span className="text-[10px] text-[#828282] dark:text-[#9FB1A2]">
-                      {log.groupName} · {new Date(log.sentAt).toLocaleString('uz-UZ')}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal Before Sending Gmail Messages (Mandatory per Workspace Skill) */}
+      {pendingGmailConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#172219] rounded-3xl w-full max-w-lg shadow-2xl border border-[#EBE7DF] dark:border-[#243326] overflow-hidden">
+            <div className="bg-[#2C3E2D] text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Mail className="w-5 h-5 text-amber-300" />
+                <div>
+                  <h3 className="text-sm font-bold">{pendingGmailConfirm.title}</h3>
+                  <p className="text-[11px] text-[#A7C2AA]">
+                    Google (Gmail) orqali xabar yuborishni tasdiqlang
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isSendingGmail}
+                onClick={() => setPendingGmailConfirm(null)}
+                className="w-7 h-7 rounded-full bg-white/10 text-white text-xs flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 flex flex-col gap-3.5 text-xs">
+              {(!googleUser || !hasGoogleToken || needsGoogleAuth) && (
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <p className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
+                    Gmail orqali xabar yuborish uchun avval Google hisobingiz bilan kiring:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleConnectGoogle}
+                    className="gsi-material-button shrink-0"
+                  >
+                    <div className="gsi-material-button-state"></div>
+                    <div className="gsi-material-button-content-wrapper">
+                      <div className="gsi-material-button-icon">
+                        <svg
+                          version="1.1"
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 48 48"
+                          style={{ display: 'block' }}
+                        >
+                          <path
+                            fill="#EA4335"
+                            d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                          ></path>
+                          <path
+                            fill="#4285F4"
+                            d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                          ></path>
+                          <path
+                            fill="#FBBC05"
+                            d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                          ></path>
+                          <path
+                            fill="#34A853"
+                            d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                          ></path>
+                          <path fill="none" d="M0 0h48v48H0z"></path>
+                        </svg>
+                      </div>
+                      <span className="gsi-material-button-contents">Sign in with Google</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <span className="text-[11px] font-bold text-[#828282] dark:text-[#9FB1A2] block mb-1">
+                  Qabul qiluvchi o'quvchilar ({pendingGmailConfirm.items.length} ta):
+                </span>
+                <div className="max-h-32 overflow-y-auto flex flex-col gap-1.5 bg-[#FAF8F5] dark:bg-[#111A13] p-2.5 rounded-xl border border-[#EBE7DF] dark:border-[#243326]">
+                  {pendingGmailConfirm.items.map((it) => (
+                    <div key={it.student.id} className="flex items-center justify-between text-[11px]">
+                      <strong className="text-[#1A2E1C] dark:text-[#E6EAE7]">{it.student.fullName}</strong>
+                      <span className="font-mono text-blue-600 dark:text-blue-400">
+                        {it.email}
+                        {pendingGmailConfirm.includeSms && it.phone ? ` + SMS (${it.phone})` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-[#828282] dark:text-[#9FB1A2] block mb-1">
+                  Xabar mavzusi (Subject):
+                </span>
+                <div className="p-2.5 rounded-xl bg-[#FAF8F5] dark:bg-[#111A13] border border-[#EBE7DF] dark:border-[#243326] font-bold text-[#1A2E1C] dark:text-[#E6EAE7]">
+                  {pendingGmailConfirm.items[0]?.subject}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-[#828282] dark:text-[#9FB1A2] block mb-1">
+                  Yuboriladigan xabar matni:
+                </span>
+                <div className="p-3 rounded-xl bg-[#FAF8F5] dark:bg-[#111A13] border border-[#EBE7DF] dark:border-[#243326] whitespace-pre-line text-[11px] text-[#2D2D2D] dark:text-[#D4DFD6]">
+                  {pendingGmailConfirm.items[0]?.message}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#EBE7DF] dark:border-[#243326]">
+                <button
+                  type="button"
+                  disabled={isSendingGmail}
+                  onClick={() => setPendingGmailConfirm(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#828282] hover:bg-[#FAF8F5] dark:hover:bg-[#111A13]"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingGmail}
+                  onClick={handleConfirmAndSendGmail}
+                  className="px-5 py-2 bg-[#2C3E2D] hover:bg-[#1C2C1D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5 text-amber-300" />
+                  <span>
+                    {isSendingGmail ? 'Yuborilmoqda...' : 'Tasdiqlash va Yuborish'}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

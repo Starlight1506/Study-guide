@@ -7,6 +7,7 @@ export interface StudentAccount {
   enrolledTrack: 'literacy' | 'design' | 'both';
   createdAt: string;
   phone?: string;
+  googleEmail?: string;
   notes?: string;
 }
 
@@ -54,6 +55,8 @@ export interface SmsLogRecord {
   studentId: string;
   studentName: string;
   phone: string;
+  googleEmail?: string;
+  channel?: 'sms' | 'gmail' | 'both';
   groupId: string;
   groupName: string;
   lessonDateKey: string;
@@ -230,6 +233,8 @@ export const sendStudentSms = async (payload: {
   studentId: string;
   studentName: string;
   phone: string;
+  googleEmail?: string;
+  channel?: 'sms' | 'gmail' | 'both';
   groupId: string;
   groupName: string;
   message: string;
@@ -243,10 +248,15 @@ export const sendStudentSms = async (payload: {
     if (res.ok) {
       const data = await res.json();
       if (data.log) {
-        const logs = [data.log, ...getStoredSmsLogs()];
+        const enrichedLog: SmsLogRecord = {
+          ...data.log,
+          googleEmail: payload.googleEmail || data.log.googleEmail,
+          channel: payload.channel || data.log.channel || 'sms',
+        };
+        const logs = [enrichedLog, ...getStoredSmsLogs()];
         localStorage.setItem(STORAGE_SMS_LOGS_KEY, JSON.stringify(logs));
         window.dispatchEvent(new CustomEvent('sms_logs_updated'));
-        return data.log;
+        return enrichedLog;
       }
     }
   } catch {
@@ -257,6 +267,8 @@ export const sendStudentSms = async (payload: {
     studentId: payload.studentId,
     studentName: payload.studentName,
     phone: payload.phone,
+    googleEmail: payload.googleEmail,
+    channel: payload.channel || 'sms',
     groupId: payload.groupId,
     groupName: payload.groupName,
     lessonDateKey: new Date().toISOString().slice(0, 10),
@@ -495,6 +507,7 @@ export const addStudent = (data: {
   gradeClass: string;
   enrolledTrack: 'literacy' | 'design' | 'both';
   phone?: string;
+  googleEmail?: string;
   notes?: string;
 }): StudentAccount => {
   const students = getStoredStudents();
@@ -506,6 +519,7 @@ export const addStudent = (data: {
     gradeClass: data.gradeClass.trim() || 'Umumiy',
     enrolledTrack: data.enrolledTrack,
     phone: data.phone?.trim() || '',
+    googleEmail: data.googleEmail?.trim() || '',
     notes: data.notes?.trim() || '',
     createdAt: new Date().toISOString(),
   };

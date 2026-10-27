@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './src/db/index.ts';
@@ -351,11 +352,42 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // ---------------------------------------------------------------------------
   // SHARED STUDENTS, GRADES & RATINGS API (Cross-device persistence)
   // ---------------------------------------------------------------------------
+  function unpackStudentRow(row: any) {
+    const rawNotes = typeof row.notes === 'string' ? row.notes : '';
+    const gmailMatch = rawNotes.match(/\[gmail:([^\]]+)\]/i);
+    const googleEmail = gmailMatch ? gmailMatch[1].trim() : row.googleEmail || '';
+    const cleanNotes = rawNotes.replace(/\s*\[gmail:[^\]]+\]/gi, '').trim();
+    return {
+      ...row,
+      googleEmail,
+      notes: cleanNotes,
+    };
+  }
+
+  function packStudentForDb(student: any) {
+    const baseNotes = typeof student.notes === 'string'
+      ? student.notes.replace(/\s*\[gmail:[^\]]+\]/gi, '').trim()
+      : '';
+    const cleanEmail = typeof student.googleEmail === 'string' ? student.googleEmail.trim() : '';
+    const packedNotes = cleanEmail ? `${baseNotes} [gmail:${cleanEmail}]`.trim() : baseNotes;
+    return {
+      id: student.id,
+      fullName: student.fullName,
+      login: student.login,
+      password: student.password || 'Student@123#',
+      gradeClass: student.gradeClass || '5-sinf',
+      enrolledTrack: student.enrolledTrack || 'both',
+      phone: student.phone || '',
+      notes: packedNotes,
+      createdAt: student.createdAt || new Date().toISOString(),
+    };
+  }
+
   // GET all students
   app.get('/api/students', async (_req, res) => {
     try {
       const records = await db.select().from(studentsTable);
-      res.json({ students: records });
+      res.json({ students: records.map(unpackStudentRow) });
     } catch (error: any) {
       console.error('Error fetching students:', error);
       res.status(500).json({ error: error.message });
@@ -369,13 +401,14 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!student.id || !student.login || !student.fullName) {
         return res.status(400).json({ error: 'Missing student fields' });
       }
+      const dbPayload = packStudentForDb(student);
       const existing = await db.select().from(studentsTable).where(eq(studentsTable.id, student.id));
       if (existing.length > 0) {
-        await db.update(studentsTable).set(student).where(eq(studentsTable.id, student.id));
+        await db.update(studentsTable).set(dbPayload).where(eq(studentsTable.id, student.id));
       } else {
-        await db.insert(studentsTable).values(student);
+        await db.insert(studentsTable).values(dbPayload);
       }
-      res.json({ success: true, student });
+      res.json({ success: true, student: unpackStudentRow(dbPayload) });
     } catch (error: any) {
       console.error('Error saving student:', error);
       res.status(500).json({ error: error.message });
@@ -763,8 +796,196 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   });
 
   // ---------------------------------------------------------------------------
-  // SMS REMINDER SYSTEM (30 minutes before lesson start)
+  // SMS & GOOGLE GMAIL / SMTP REMINDER SYSTEM (30 minutes before lesson start)
   // ---------------------------------------------------------------------------
+  // In-memory server-side OAuth access token cache synced from Admin Google Sign-In
+  const serverGmailAuthState: {
+    accessToken: string | null;
+    senderEmail: string | null;
+    updatedAt: string | null;
+  } = {
+    accessToken: null,
+    senderEmail: process.env.GMAIL_SENDER_EMAIL || process.env.SMTP_USER || null,
+    updatedAt: null,
+  };
+
+  function encodeMimeHeaderUtf8(text: string): string {
+    return `=?utf-8?B?${Buffer.from(text, 'utf-8').toString('base64')}?=`;
+  }
+
+  function buildRfc2822Base64UrlEmail(params: {
+    to: string;
+    from?: string | null;
+    subject: string;
+    bodyText: string;
+    htmlBody?: string;
+  }): string {
+    const cleanTo = params.to.trim();
+    const boundary = ` smart_school_${Date.now().toString(16)}`;
+    const headers = [
+      ...(params.from ? [`From: "SMART HIGH SCHOOL" <${params.from}>`] : []),
+      `To: ${cleanTo}`,
+      'MIME-Version: 1.0',
+      `Subject: ${encodeMimeHeaderUtf8(params.subject)}`,
+    ];
+
+    let rawEmail = '';
+    if (params.htmlBody) {
+      headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+      rawEmail = [
+        ...headers,
+        '',
+        `--${boundary}`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        Buffer.from(params.bodyText, 'utf-8').toString('base64'),
+        `--${boundary}`,
+        'Content-Type: text/html; charset="UTF-8"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        Buffer.from(params.htmlBody, 'utf-8').toString('base64'),
+        `--${boundary}--`,
+      ].join('\r\n');
+    } else {
+      headers.push('Content-Type: text/plain; charset="UTF-8"');
+      headers.push('Content-Transfer-Encoding: base64');
+      rawEmail = [
+        ...headers,
+        '',
+        Buffer.from(params.bodyText, 'utf-8').toString('base64'),
+      ].join('\r\n');
+    }
+
+    return Buffer.from(rawEmail, 'utf-8')
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  }
+
+  function buildLessonReminderHtml(params: {
+    studentName: string;
+    groupName: string;
+    timeSlot: string;
+    room: string;
+    bodyText: string;
+  }): string {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #FAF8F5; border: 1px solid #EBE7DF; border-radius: 16px; color: #1A2E1C;">
+        <div style="background-color: #2C3E2D; color: #ffffff; padding: 16px 20px; border-radius: 12px; margin-bottom: 20px;">
+          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #A7C2AA; font-weight: bold;">SMART HIGH SCHOOL · IT Ta'lim Portali</div>
+          <h2 style="margin: 6px 0 0 0; font-size: 18px;">⏰ Dars boshlanishiga 30 daqiqa qoldi!</h2>
+        </div>
+        <p style="font-size: 14px; line-height: 1.6; margin: 0 0 14px 0;">
+          Hurmatli <strong>${params.studentName}</strong>,
+        </p>
+        <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">
+          Sizning <strong>${params.groupName}</strong> guruhidagi IT va Dizayn darsingiz <strong>30 daqiqadan so'ng</strong> boshlanadi.
+        </p>
+        <div style="background-color: #ffffff; border: 1px solid #EBE7DF; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; font-size: 13px;">
+          <div style="margin-bottom: 6px;">📌 <strong>Guruh:</strong> ${params.groupName}</div>
+          <div style="margin-bottom: 6px;">🕒 <strong>Dars vaqti:</strong> ${params.timeSlot}</div>
+          <div>🏫 <strong>Xona:</strong> ${params.room}</div>
+        </div>
+        <p style="font-size: 13px; color: #4F5D50; margin: 0;">
+          Iltimos, darsga kechikmasdan va o'z vaqtida tayyor bo'lib kelishingizni so'raymiz!
+        </p>
+      </div>
+    `.trim();
+  }
+
+  async function dispatchEmailViaBackend(params: {
+    to: string;
+    subject: string;
+    bodyText: string;
+    htmlBody?: string;
+    bearerToken?: string | null;
+  }): Promise<{ delivered: boolean; provider: 'gmail_api' | 'smtp' | 'none'; messageId?: string; error?: string }> {
+    const cleanTo = params.to.trim();
+    const activeToken = params.bearerToken || serverGmailAuthState.accessToken;
+
+    // 1. Primary: Google Gmail REST API (https://gmail.googleapis.com/gmail/v1/users/me/messages/send)
+    if (activeToken) {
+      try {
+        const rawEncoded = buildRfc2822Base64UrlEmail({
+          to: cleanTo,
+          from: serverGmailAuthState.senderEmail,
+          subject: params.subject,
+          bodyText: params.bodyText,
+          htmlBody: params.htmlBody,
+        });
+
+        const gmailResp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${activeToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ raw: rawEncoded }),
+        });
+
+        if (gmailResp.ok) {
+          const data = (await gmailResp.json().catch(() => ({}))) as { id?: string };
+          return { delivered: true, provider: 'gmail_api', messageId: data.id };
+        }
+
+        if (gmailResp.status === 401 || gmailResp.status === 403) {
+          if (activeToken === serverGmailAuthState.accessToken) {
+            serverGmailAuthState.accessToken = null;
+          }
+          // Fall through to SMTP if configured, otherwise report NEEDS_AUTH
+          if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            return { delivered: false, provider: 'none', error: 'NEEDS_AUTH' };
+          }
+        } else {
+          const errJson = (await gmailResp.json().catch(() => ({}))) as any;
+          const apiErrMessage = errJson?.error?.message || `Gmail API status ${gmailResp.status}`;
+          if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            return { delivered: false, provider: 'none', error: apiErrMessage };
+          }
+        }
+      } catch (err: any) {
+        console.warn('Server Gmail API dispatch error:', err);
+        if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+          return { delivered: false, provider: 'none', error: err?.message || 'Gmail API tarmoq xatosi' };
+        }
+      }
+    }
+
+    // 2. Secondary / Fallback: Server-side SMTP via Nodemailer (smtp.gmail.com)
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        const smtpPort = Number(process.env.SMTP_PORT || 465);
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || 'smtp.gmail.com',
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
+
+        const senderAddress = process.env.GMAIL_SENDER_EMAIL || process.env.SMTP_USER;
+        const info = await transporter.sendMail({
+          from: `"SMART HIGH SCHOOL" <${senderAddress}>`,
+          to: cleanTo,
+          subject: params.subject,
+          text: params.bodyText,
+          ...(params.htmlBody ? { html: params.htmlBody } : {}),
+        });
+
+        return { delivered: true, provider: 'smtp', messageId: info.messageId };
+      } catch (smtpErr: any) {
+        console.error('Server SMTP dispatch error:', smtpErr);
+        return { delivered: false, provider: 'none', error: smtpErr?.message || 'SMTP xatosi' };
+      }
+    }
+
+    return { delivered: false, provider: 'none', error: 'NEEDS_AUTH' };
+  }
+
   async function dispatchSmsViaGateway(phone: string, message: string): Promise<string> {
     const cleanPhone = phone.replace(/[^0-9+]/g, '');
     if (process.env.SMS_GATEWAY_URL) {
@@ -785,6 +1006,121 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
     return 'sent';
   }
 
+  // Sync Google OAuth Bearer token from client to server memory so the 30-min background scheduler can send Gmail reminders
+  app.post('/api/gmail/sync-token', (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    const { email, clear } = req.body || {};
+
+    if (clear) {
+      serverGmailAuthState.accessToken = null;
+      serverGmailAuthState.updatedAt = new Date().toISOString();
+      return res.json({ success: true, gmailApiReady: false });
+    }
+
+    if (bearerToken) {
+      serverGmailAuthState.accessToken = bearerToken;
+      if (email) {
+        serverGmailAuthState.senderEmail = String(email).trim();
+      }
+      serverGmailAuthState.updatedAt = new Date().toISOString();
+    }
+
+    res.json({
+      success: true,
+      gmailApiReady: Boolean(serverGmailAuthState.accessToken),
+      senderEmail: serverGmailAuthState.senderEmail,
+      smtpConfigured: Boolean(process.env.SMTP_USER && process.env.SMTP_PASS),
+    });
+  });
+
+  // Check backend Gmail API / SMTP & 30-minute scheduler status
+  app.get('/api/gmail/status', (_req, res) => {
+    const smtpConfigured = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+    const gmailApiReady = Boolean(serverGmailAuthState.accessToken);
+    res.json({
+      gmailApiReady,
+      smtpConfigured,
+      ready: gmailApiReady || smtpConfigured,
+      activeProvider: gmailApiReady ? 'gmail_api' : smtpConfigured ? 'smtp' : 'client_oauth_required',
+      senderEmail:
+        serverGmailAuthState.senderEmail ||
+        process.env.GMAIL_SENDER_EMAIL ||
+        process.env.SMTP_USER ||
+        null,
+      smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+      schedulerActive: true,
+      preLessonMinutes: 30,
+      updatedAt: serverGmailAuthState.updatedAt,
+    });
+  });
+
+  // Backend endpoint to dispatch 30-minute pre-lesson email via Gmail API or SMTP
+  app.post('/api/gmail/send', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+      const {
+        to,
+        subject,
+        bodyText,
+        studentName,
+        groupName,
+        timeSlot,
+        room,
+        senderEmail,
+      } = req.body || {};
+
+      if (!to || !subject || !bodyText) {
+        return res.status(400).json({ error: "Qabul qiluvchi email ('to'), 'subject' va 'bodyText' kiritilishi shart" });
+      }
+
+      if (bearerToken) {
+        serverGmailAuthState.accessToken = bearerToken;
+        if (senderEmail) {
+          serverGmailAuthState.senderEmail = String(senderEmail).trim();
+        }
+        serverGmailAuthState.updatedAt = new Date().toISOString();
+      }
+
+      const htmlBody =
+        studentName && groupName
+          ? buildLessonReminderHtml({
+              studentName,
+              groupName,
+              timeSlot: timeSlot || 'Reja asosida',
+              room: room || 'Asosiy xona',
+              bodyText,
+            })
+          : undefined;
+
+      const result = await dispatchEmailViaBackend({
+        to,
+        subject,
+        bodyText,
+        htmlBody,
+        bearerToken,
+      });
+
+      if (!result.delivered) {
+        const statusCode = result.error === 'NEEDS_AUTH' ? 401 : 500;
+        return res.status(statusCode).json({
+          error: result.error || 'Gmail yuborishda xatolik',
+          code: result.error === 'NEEDS_AUTH' ? 'NEEDS_AUTH' : 'SEND_FAILED',
+        });
+      }
+
+      res.json({
+        success: true,
+        id: result.messageId || `gmail_${Date.now()}`,
+        provider: result.provider,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/gmail/send:', error);
+      res.status(500).json({ error: error.message || 'Server Gmail xatosi' });
+    }
+  });
+
   app.get('/api/sms-logs', async (_req, res) => {
     try {
       const logs = await db.select().from(smsLogsTable).orderBy(desc(smsLogsTable.sentAt));
@@ -797,16 +1133,23 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
 
   app.post('/api/sms/send', async (req, res) => {
     try {
-      const { studentId, studentName, phone, groupId, groupName, message, lessonDateKey } = req.body;
-      if (!phone || !message) {
-        return res.status(400).json({ error: 'Telefon raqami va xabar matni kiritilishi shart' });
+      const { studentId, studentName, phone, googleEmail, channel, groupId, groupName, message, lessonDateKey } = req.body;
+      const contactTarget = phone || googleEmail;
+      if (!contactTarget || !message) {
+        return res.status(400).json({ error: 'Telefon raqami yoki Google email hamda xabar matni kiritilishi shart' });
       }
-      const status = await dispatchSmsViaGateway(phone, message);
+      const status = phone && channel !== 'gmail' ? await dispatchSmsViaGateway(phone, message) : 'sent';
+      const displayContact =
+        channel === 'both' && phone && googleEmail
+          ? `${phone} | ${googleEmail}`
+          : channel === 'gmail' && googleEmail
+          ? googleEmail
+          : contactTarget;
       const record = {
         id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         studentId: studentId || 'manual',
         studentName: studentName || "O'quvchi",
-        phone,
+        phone: displayContact,
         groupId: groupId || 'manual',
         groupName: groupName || 'Dars eslatmasi',
         lessonDateKey: lessonDateKey || new Date().toISOString().slice(0, 10),
@@ -815,14 +1158,14 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
         sentAt: new Date().toISOString(),
       };
       await db.insert(smsLogsTable).values(record);
-      res.json({ success: true, log: record });
+      res.json({ success: true, log: { ...record, googleEmail, channel: channel || 'sms' } });
     } catch (error: any) {
       console.error('Error sending SMS:', error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  // Server-side 30-minute Pre-Lesson Automatic SMS Scheduler
+  // Server-side 30-minute Pre-Lesson Automatic SMS & Gmail/SMTP Scheduler
   const SERVER_SCHEDULE_GROUPS = [
     {
       id: 'group_1',
@@ -865,7 +1208,8 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       const currentMinutes = tashkentTime.getHours() * 60 + tashkentTime.getMinutes();
       const dateKey = `${tashkentTime.getFullYear()}-${String(tashkentTime.getMonth() + 1).padStart(2, '0')}-${String(tashkentTime.getDate()).padStart(2, '0')}`;
 
-      const allStudents = await db.select().from(studentsTable);
+      const rawStudents = await db.select().from(studentsTable);
+      const allStudents = rawStudents.map(unpackStudentRow);
       const existingLogs = await db.select().from(smsLogsTable);
 
       for (const grp of SERVER_SCHEDULE_GROUPS) {
@@ -876,24 +1220,68 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
         // Trigger if lesson starts in 25 to 32 minutes (30-minute reminder window)
         if (diffMinutes >= 25 && diffMinutes <= 32) {
           const groupStudents = allStudents.filter(
-            (s) => grp.logins.includes(s.login.toLowerCase()) && s.phone && s.phone.trim().length >= 7
+            (s) =>
+              grp.logins.includes(s.login.toLowerCase()) &&
+              ((s.phone && s.phone.trim().length >= 7) || (s.googleEmail && s.googleEmail.includes('@')))
           );
 
           for (const st of groupStudents) {
             const lessonKey = `${grp.id}_${dateKey}_${st.id}`;
             const alreadySent = existingLogs.some((l) => l.lessonDateKey === lessonKey);
-            if (!alreadySent && st.phone) {
-              const msg = `SMART HIGH SCHOOL: Hurmatli ${st.fullName}, sizning ${grp.name} darsingiz 30 daqiqadan so'ng (${grp.timeSlot}) ${grp.room}da boshlanadi. Darsga o'z vaqtida kelishingizni so'raymiz!`;
-              const status = await dispatchSmsViaGateway(st.phone, msg);
+            if (alreadySent) continue;
+
+            const hasValidPhone = Boolean(st.phone && st.phone.trim().length >= 7);
+            const hasValidEmail = Boolean(st.googleEmail && st.googleEmail.includes('@'));
+
+            const smsMsg = `SMART HIGH SCHOOL: Hurmatli ${st.fullName}, sizning ${grp.name} darsingiz 30 daqiqadan so'ng (${grp.timeSlot}) ${grp.room}da boshlanadi. Darsga o'z vaqtida kelishingizni so'raymiz!`;
+            const emailSubject = `SMART HIGH SCHOOL: ${grp.name} darsi 30 daqiqadan so'ng boshlanadi!`;
+            const emailBody = `SMART HIGH SCHOOL — Dars Eslatmasi (30 daqiqa oldin)\n\nHurmatli ${st.fullName}!\nSizning "${grp.name}" guruhidagi IT va Dizayn darsingiz 30 daqiqadan so'ng (${grp.timeSlot}) ${grp.room}da boshlanadi.\n\nIltimos, darsga o'z vaqtida tayyor bo'lib kelishingizni so'raymiz!`;
+
+            let smsSent = false;
+            let emailSent = false;
+            let status = 'sent';
+
+            if (hasValidPhone && st.phone) {
+              status = await dispatchSmsViaGateway(st.phone, smsMsg);
+              smsSent = true;
+            }
+
+            if (hasValidEmail && st.googleEmail) {
+              const emailRes = await dispatchEmailViaBackend({
+                to: st.googleEmail,
+                subject: emailSubject,
+                bodyText: emailBody,
+                htmlBody: buildLessonReminderHtml({
+                  studentName: st.fullName,
+                  groupName: grp.name,
+                  timeSlot: grp.timeSlot,
+                  room: grp.room,
+                  bodyText: emailBody,
+                }),
+              });
+              if (emailRes.delivered) {
+                emailSent = true;
+                status = 'delivered';
+              }
+            }
+
+            if (smsSent || emailSent) {
+              const contactDisplay =
+                smsSent && emailSent
+                  ? `${st.phone} | ${st.googleEmail}`
+                  : emailSent
+                  ? st.googleEmail!
+                  : st.phone!;
+
               await db.insert(smsLogsTable).values({
                 id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 studentId: st.id,
                 studentName: st.fullName,
-                phone: st.phone,
+                phone: contactDisplay,
                 groupId: grp.id,
                 groupName: grp.name,
                 lessonDateKey: lessonKey,
-                message: msg,
+                message: smsMsg,
                 status,
                 sentAt: new Date().toISOString(),
               });
@@ -906,7 +1294,7 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
     }
   }
 
-  // Run automatic 30-min SMS check every 60 seconds
+  // Run automatic 30-min SMS + Gmail/SMTP check every 60 seconds
   setInterval(checkAndSendUpcomingLessonSms, 60 * 1000);
 
   // Public static assets (manifest.json, icon.svg, sw.js)

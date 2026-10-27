@@ -69,7 +69,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     // 0. Admin Authentication
     if (selectedRole === 'admin') {
       if (!authenticateAdmin(cleanInput, cleanPass)) {
-        setError("Admin logini yoki paroli noto'g'ri! (Standart login: admin | parol: Admin@2026#)");
+        setError("Admin logini yoki paroli noto'g'ri! Iltimos, ma'lumotlarni tekshirib qayta urinib ko'ring.");
         return;
       }
 
@@ -236,7 +236,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               </p>
             ) : (
               <p>
-                <strong>Admin:</strong> O'qituvchilarga login/parol berish va anonim baholarni ko'rish (Login: <code className="font-mono font-bold">admin</code>, Parol: <code className="font-mono font-bold">Admin@2026#</code>).
+                <strong>Admin:</strong> O'qituvchilarga login/parol berish va anonim baholarni boshqarish uchun maxfiy admin hisobingiz bilan kiring.
               </p>
             )}
           </div>
