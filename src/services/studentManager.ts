@@ -1,3 +1,5 @@
+import { startRealtimeGlobalSync } from '../lib/firebase';
+
 export interface StudentAccount {
   id: string;
   fullName: string;
@@ -490,6 +492,7 @@ export const getStoredStudents = (): StudentAccount[] => {
 export const saveStudents = (students: StudentAccount[]): void => {
   try {
     localStorage.setItem(STORAGE_STUDENTS_KEY, JSON.stringify(students));
+    window.dispatchEvent(new CustomEvent('students_updated'));
   } catch (e) {
     console.error('Failed to save students:', e);
   }
@@ -578,17 +581,8 @@ export const clearAllGrades = (): void => {
 
 export const getStoredGrades = (): StudentGrade[] => {
   try {
-    const isWiped = localStorage.getItem(GRADES_CLEARED_FLAG);
-    // If not yet wiped to clean state as requested by the user, clear all old grades immediately
-    if (!isWiped) {
-      localStorage.setItem(STORAGE_GRADES_KEY, JSON.stringify([]));
-      localStorage.setItem(GRADES_CLEARED_FLAG, 'true');
-      return [];
-    }
-
     const raw = localStorage.getItem(STORAGE_GRADES_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_GRADES_KEY, JSON.stringify([]));
       return [];
     }
     const parsed: StudentGrade[] = JSON.parse(raw);
@@ -897,20 +891,10 @@ const RATINGS_WIPED_CLEAN_KEY = 'it_portal_ratings_wiped_clean_v3';
 
 export const getStoredRatings = (): LessonRatingFeedback[] => {
   try {
-    const isWiped = localStorage.getItem(RATINGS_WIPED_CLEAN_KEY);
-    // If not yet wiped to clean state as requested by the user, clear all old ratings immediately
-    if (!isWiped) {
-      localStorage.setItem(STORAGE_RATINGS_KEY, JSON.stringify([]));
-      localStorage.setItem(RATINGS_WIPED_CLEAN_KEY, 'true');
-      return [];
-    }
-
     const raw = localStorage.getItem(STORAGE_RATINGS_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_RATINGS_KEY, JSON.stringify([]));
       return [];
     }
-
     const parsed: LessonRatingFeedback[] = JSON.parse(raw);
     return parsed;
   } catch (e) {
@@ -1166,9 +1150,20 @@ export const getStudentRank = (
 // ============================================================================
 // SERVER SYNCHRONIZATION (CROSS-DEVICE PERSISTENCE)
 // ============================================================================
+const CLOUD_MIGRATED_FLAG = 'it_portal_global_cloud_migrated_v2';
+
 export const syncWithServer = async (): Promise<void> => {
   if (typeof window === 'undefined') return;
   try {
+    const isMigrated = localStorage.getItem(CLOUD_MIGRATED_FLAG) === 'true';
+
+    // Read local state before fetching so we can push any un-synced local edits once
+    const localStudents = getStoredStudents();
+    const localGrades = getStoredGrades();
+    const localRatings = getStoredRatings();
+    const localTeachers = getStoredTeachers();
+    const localEvals = getStoredTeacherEvaluations();
+
     const [stdRes, grdRes, rtgRes, tchRes, evalRes, smsRes] = await Promise.all([
       fetch('/api/students'),
       fetch('/api/grades'),
@@ -1180,11 +1175,44 @@ export const syncWithServer = async (): Promise<void> => {
 
     if (stdRes.ok) {
       const data = await stdRes.json();
-      if (Array.isArray(data.students) && data.students.length > 0) {
-        const merged = [...data.students];
+      if (Array.isArray(data.students)) {
+        const serverMap = new Map<string, StudentAccount>();
+        data.students.forEach((st: StudentAccount) => {
+          serverMap.set(st.login.toLowerCase(), st);
+        });
+
+        // If this browser had local edits (like phone, googleEmail, or newly added students) not yet in cloud, push them once
+        if (!isMigrated) {
+          for (const locSt of localStudents) {
+            const key = locSt.login.toLowerCase();
+            const srvSt = serverMap.get(key);
+            const hasLocalContact = Boolean(
+              (locSt.phone && (!srvSt || !srvSt.phone)) ||
+                (locSt.googleEmail && (!srvSt || !srvSt.googleEmail))
+            );
+            if (!srvSt || hasLocalContact) {
+              const mergedStudent: StudentAccount = srvSt
+                ? {
+                    ...srvSt,
+                    phone: locSt.phone || srvSt.phone || '',
+                    googleEmail: locSt.googleEmail || srvSt.googleEmail || '',
+                  }
+                : locSt;
+              serverMap.set(key, mergedStudent);
+              fetch('/api/students', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(mergedStudent),
+              }).catch(() => {});
+            }
+          }
+        }
+
+        // Also ensure INITIAL_STUDENTS exist
         for (const st of INITIAL_STUDENTS) {
-          if (!merged.some((existing: StudentAccount) => existing.login.toLowerCase() === st.login.toLowerCase())) {
-            merged.push(st);
+          const key = st.login.toLowerCase();
+          if (!serverMap.has(key)) {
+            serverMap.set(key, st);
             fetch('/api/students', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1192,24 +1220,32 @@ export const syncWithServer = async (): Promise<void> => {
             }).catch(() => {});
           }
         }
-        localStorage.setItem(STORAGE_STUDENTS_KEY, JSON.stringify(merged));
-      } else {
-        // Seed initial students to shared DB once
-        const students = getStoredStudents();
-        for (const st of students) {
-          await fetch('/api/students', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(st),
-          }).catch(() => {});
-        }
+
+        const mergedList = Array.from(serverMap.values());
+        localStorage.setItem(STORAGE_STUDENTS_KEY, JSON.stringify(mergedList));
+        window.dispatchEvent(new CustomEvent('students_updated'));
       }
     }
 
     if (grdRes.ok) {
       const data = await grdRes.json();
       if (Array.isArray(data.grades)) {
-        localStorage.setItem(STORAGE_GRADES_KEY, JSON.stringify(data.grades));
+        const gradeMap = new Map<string, StudentGrade>();
+        data.grades.forEach((g: StudentGrade) => gradeMap.set(g.id, g));
+        if (!isMigrated) {
+          for (const locG of localGrades) {
+            if (!gradeMap.has(locG.id)) {
+              gradeMap.set(locG.id, locG);
+              fetch('/api/grades', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locG),
+              }).catch(() => {});
+            }
+          }
+        }
+        const mergedGrades = Array.from(gradeMap.values());
+        localStorage.setItem(STORAGE_GRADES_KEY, JSON.stringify(mergedGrades));
         window.dispatchEvent(new CustomEvent('grades_updated'));
       }
     }
@@ -1217,23 +1253,70 @@ export const syncWithServer = async (): Promise<void> => {
     if (rtgRes.ok) {
       const data = await rtgRes.json();
       if (Array.isArray(data.ratings)) {
-        localStorage.setItem(STORAGE_RATINGS_KEY, JSON.stringify(data.ratings));
+        const rtgMap = new Map<string, LessonRatingFeedback>();
+        data.ratings.forEach((r: LessonRatingFeedback) => rtgMap.set(r.id, r));
+        if (!isMigrated) {
+          for (const locR of localRatings) {
+            if (!rtgMap.has(locR.id)) {
+              rtgMap.set(locR.id, locR);
+              fetch('/api/ratings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locR),
+              }).catch(() => {});
+            }
+          }
+        }
+        const mergedRatings = Array.from(rtgMap.values());
+        localStorage.setItem(STORAGE_RATINGS_KEY, JSON.stringify(mergedRatings));
         window.dispatchEvent(new CustomEvent('lesson_ratings_updated'));
       }
     }
 
     if (tchRes && tchRes.ok) {
       const data = await tchRes.json();
-      if (Array.isArray(data.teachers) && data.teachers.length > 0) {
-        localStorage.setItem(STORAGE_TEACHERS_KEY, JSON.stringify(data.teachers));
-        window.dispatchEvent(new CustomEvent('teachers_updated'));
+      if (Array.isArray(data.teachers)) {
+        const tchMap = new Map<string, TeacherAccount>();
+        data.teachers.forEach((t: TeacherAccount) => tchMap.set(t.login.toLowerCase(), t));
+        if (!isMigrated) {
+          for (const locT of localTeachers) {
+            const key = locT.login.toLowerCase();
+            if (!tchMap.has(key)) {
+              tchMap.set(key, locT);
+              fetch('/api/teachers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locT),
+              }).catch(() => {});
+            }
+          }
+        }
+        const mergedTeachers = Array.from(tchMap.values());
+        if (mergedTeachers.length > 0) {
+          localStorage.setItem(STORAGE_TEACHERS_KEY, JSON.stringify(mergedTeachers));
+          window.dispatchEvent(new CustomEvent('teachers_updated'));
+        }
       }
     }
 
     if (evalRes && evalRes.ok) {
       const data = await evalRes.json();
       if (Array.isArray(data.evaluations)) {
-        localStorage.setItem(STORAGE_TEACHER_EVALS_KEY, JSON.stringify(data.evaluations));
+        const evalMap = new Map<string, TeacherEvaluation>();
+        data.evaluations.forEach((ev: TeacherEvaluation) => evalMap.set(ev.id, ev));
+        if (!isMigrated) {
+          for (const locEv of localEvals) {
+            if (!evalMap.has(locEv.id)) {
+              evalMap.set(locEv.id, locEv);
+              fetch('/api/teacher-evaluations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locEv),
+              }).catch(() => {});
+            }
+          }
+        }
+        localStorage.setItem(STORAGE_TEACHER_EVALS_KEY, JSON.stringify(Array.from(evalMap.values())));
         window.dispatchEvent(new CustomEvent('teacher_evals_updated'));
       }
     }
@@ -1245,17 +1328,30 @@ export const syncWithServer = async (): Promise<void> => {
         window.dispatchEvent(new CustomEvent('sms_logs_updated'));
       }
     }
+
+    if (!isMigrated && stdRes.ok) {
+      localStorage.setItem(CLOUD_MIGRATED_FLAG, 'true');
+    }
   } catch (err) {
     console.warn('Cross-device sync fallback (offline/local):', err);
   }
 };
 
-// Auto start sync on load and periodically (every 15s) in browser
+// Auto start sync on load, real-time Firestore snapshot listener, and periodic sync in browser
 if (typeof window !== 'undefined') {
   syncWithServer();
-  setInterval(syncWithServer, 15000);
+  startRealtimeGlobalSync(() => {
+    syncWithServer();
+  });
+  setInterval(syncWithServer, 8000);
   window.addEventListener('focus', syncWithServer);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      syncWithServer();
+    }
+  });
 }
+
 
 
 

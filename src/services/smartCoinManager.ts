@@ -155,14 +155,37 @@ export function getStoredSmartCoins(): SmartCoinRecord[] {
   }
 }
 
+const COINS_CLOUD_MIGRATED_FLAG = 'it_portal_coins_cloud_migrated_v2';
+
 export async function syncSmartCoinsFromServer(): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
+    const isMigrated = localStorage.getItem(COINS_CLOUD_MIGRATED_FLAG) === 'true';
+    const localCoins = getStoredSmartCoins();
+
     const res = await fetch('/api/smart-coins');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.coins)) {
-        localStorage.setItem(COINS_STORAGE_KEY, JSON.stringify(data.coins));
+        const coinMap = new Map<string, SmartCoinRecord>();
+        data.coins.forEach((c: SmartCoinRecord) => coinMap.set(c.id, c));
+
+        if (!isMigrated) {
+          for (const locC of localCoins) {
+            if (!coinMap.has(locC.id)) {
+              coinMap.set(locC.id, locC);
+              fetch('/api/smart-coins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locC),
+              }).catch(() => {});
+            }
+          }
+          localStorage.setItem(COINS_CLOUD_MIGRATED_FLAG, 'true');
+        }
+
+        const merged = Array.from(coinMap.values());
+        localStorage.setItem(COINS_STORAGE_KEY, JSON.stringify(merged));
         window.dispatchEvent(new CustomEvent('smart_coins_updated'));
       }
     }
@@ -173,7 +196,9 @@ export async function syncSmartCoinsFromServer(): Promise<void> {
 
 if (typeof window !== 'undefined') {
   syncSmartCoinsFromServer();
-  setInterval(syncSmartCoinsFromServer, 12000);
+  setInterval(syncSmartCoinsFromServer, 8000);
+  window.addEventListener('focus', syncSmartCoinsFromServer);
+  window.addEventListener('students_updated', syncSmartCoinsFromServer);
 }
 
 export function awardSmartCoin(params: {

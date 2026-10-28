@@ -7,10 +7,135 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  getDocFromServer,
+  collection,
+  onSnapshot,
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo:
+        auth.currentUser?.providerData?.map((provider) => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || [],
+    },
+    operationType,
+    path,
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Please check your Firebase configuration.');
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  testConnection();
+}
+
+/**
+ * Real-time listener on Firestore collections so any change made on one device
+ * immediately triggers a global state refresh on all other connected devices.
+ */
+let realtimeListenersStarted = false;
+export function startRealtimeGlobalSync(onRemoteChange: () => void) {
+  if (typeof window === 'undefined' || realtimeListenersStarted) return;
+  realtimeListenersStarted = true;
+
+  const watchedCollections = [
+    'portal_students',
+    'portal_grades',
+    'portal_ratings',
+    'portal_homeworks',
+    'portal_submissions',
+    'portal_coins',
+    'portal_teachers',
+    'portal_evaluations',
+    'portal_sms_logs',
+    'portal_meta',
+  ];
+
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const triggerDebounced = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      onRemoteChange();
+    }, 350);
+  };
+
+  watchedCollections.forEach((colName) => {
+    try {
+      onSnapshot(
+        collection(db, colName),
+        () => {
+          triggerDebounced();
+        },
+        (error) => {
+          try {
+            handleFirestoreError(error, OperationType.GET, colName);
+          } catch {
+            // Non-fatal in background listener; HTTP polling still active
+          }
+        }
+      );
+    } catch {
+      // Ignore listener setup error if offline
+    }
+  });
+}
 
 // OAuth scopes required for sending 30-minute pre-lesson reminders via Gmail
 const SCOPES = ['https://www.googleapis.com/auth/gmail.send'];
@@ -222,5 +347,3 @@ export async function sendGmailReminder(params: {
 
   return response.json();
 }
-
-

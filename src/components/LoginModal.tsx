@@ -17,6 +17,7 @@ import {
   getStoredStudents, 
   authenticateTeacher, 
   authenticateAdmin,
+  syncWithServer,
   ADMIN_CREDENTIALS,
   TEACHER_CREDENTIALS 
 } from '../services/studentManager';
@@ -54,7 +55,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -88,7 +89,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     // 1. Teacher Authentication (Supports all teachers created/edited by Admin)
     if (selectedRole === 'teacher') {
-      const matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      let matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      if (!matchedTeacher) {
+        await syncWithServer();
+        matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      }
       if (!matchedTeacher) {
         setError('O\'qituvchi logini yoki paroli noto\'g\'ri! Admin bergan login va parolni kiriting.');
         return;
@@ -110,7 +115,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     // 2. Student Authentication
     if (selectedRole === 'student') {
-      const student = authenticateStudent(cleanInput, cleanPass);
+      let student = authenticateStudent(cleanInput, cleanPass);
+      if (!student) {
+        await syncWithServer();
+        student = authenticateStudent(cleanInput, cleanPass);
+      }
       if (student) {
         const user: AppUser = {
           uid: student.id,

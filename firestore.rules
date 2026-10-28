@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidRecord(data) {
+      return data is map
+        && data.keys().hasAll(['id', 'payload', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'payload', 'updatedAt'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.payload is string && data.payload.size() <= 900000
+        && data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+    }
+
+    match /portal_students/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_grades/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_ratings/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_homeworks/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_submissions/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_coins/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_teachers/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_evaluations/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_sms_logs/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /portal_meta/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId) && isValidRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+  }
+}

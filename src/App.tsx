@@ -209,7 +209,48 @@ export default function App() {
         console.error('Error parsing stored teacher videos:', e);
       }
     }
+
+    // Fetch global teacher videos from cloud backend
+    fetch('/api/portal-meta')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.teacherVideos && typeof data.teacherVideos === 'object') {
+          const localMap = stored ? JSON.parse(stored) : {};
+          const mergedVideos = { ...localMap, ...data.teacherVideos };
+          setCustomVideos(mergedVideos);
+          localStorage.setItem('teacher_videos', JSON.stringify(mergedVideos));
+          if (Object.keys(localMap).length > Object.keys(data.teacherVideos).length) {
+            fetch('/api/portal-meta/videos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ videos: mergedVideos }),
+            }).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  // Sync student lesson progress and notes globally across devices whenever appUser changes
+  useEffect(() => {
+    if (!appUser || appUser.role !== 'student') return;
+    const studentKey = (appUser.email || appUser.uid || '').trim().toLowerCase();
+    if (!studentKey) return;
+
+    fetch(`/api/student-progress/${encodeURIComponent(studentKey)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        if (Array.isArray(data.completedLessons) && data.completedLessons.length > 0) {
+          setCompletedLessonIds(data.completedLessons);
+        }
+        if (Array.isArray(data.designCompletedLessons) && data.designCompletedLessons.length > 0) {
+          setDesignCompletedLessons(data.designCompletedLessons);
+          localStorage.setItem('design_completed_lessons', JSON.stringify(data.designCompletedLessons));
+        }
+      })
+      .catch(() => {});
+  }, [appUser?.uid, appUser?.email, appUser?.role]);
 
   const handleLoginSuccess = (user: AppUser) => {
     setAppUser(user);
@@ -246,6 +287,16 @@ export default function App() {
     setDesignCompletedLessons((prev) => {
       const updated = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
       localStorage.setItem('design_completed_lessons', JSON.stringify(updated));
+      if (appUser) {
+        const studentKey = (appUser.email || appUser.uid || '').trim().toLowerCase();
+        if (studentKey) {
+          fetch(`/api/student-progress/${encodeURIComponent(studentKey)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ designCompletedLessons: updated }),
+          }).catch(() => {});
+        }
+      }
       return updated;
     });
   };
@@ -330,6 +381,11 @@ export default function App() {
     const updated = { ...customVideos, [key]: url };
     setCustomVideos(updated);
     localStorage.setItem('teacher_videos', JSON.stringify(updated));
+    fetch('/api/portal-meta/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videos: updated }),
+    }).catch(() => {});
     setEditingVideo(false);
   };
 
@@ -339,6 +395,11 @@ export default function App() {
     delete updated[key];
     setCustomVideos(updated);
     localStorage.setItem('teacher_videos', JSON.stringify(updated));
+    fetch('/api/portal-meta/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videos: updated }),
+    }).catch(() => {});
     setVideoInputUrl('');
     setEditingVideo(false);
   };
@@ -386,8 +447,24 @@ export default function App() {
     setActiveTab('curriculum');
   };
 
-  // Toggle completion in DB
+  // Toggle completion in global DB
   const toggleLessonCompletion = async (lessonId: number) => {
+    const nextCompleted = completedLessonIds.includes(lessonId)
+      ? completedLessonIds.filter((id) => id !== lessonId)
+      : [...completedLessonIds, lessonId];
+    setCompletedLessonIds(nextCompleted);
+
+    if (appUser) {
+      const studentKey = (appUser.email || appUser.uid || '').trim().toLowerCase();
+      if (studentKey) {
+        fetch(`/api/student-progress/${encodeURIComponent(studentKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ completedLessons: nextCompleted }),
+        }).catch(() => {});
+      }
+    }
+
     if (!userToken) return;
     try {
       const res = await fetch('/api/progress/toggle', {
@@ -400,7 +477,6 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        // Refresh locally
         fetchProgress(userToken);
       }
     } catch (e) {
@@ -408,11 +484,32 @@ export default function App() {
     }
   };
 
-  // Save notes in DB
+  // Save notes in global DB
   const saveNotes = async () => {
-    if (!userToken || selectedLessonId === null) return;
+    if (selectedLessonId === null) return;
     try {
       setNotesSaveStatus('saving');
+      const studentKey = (appUser?.email || appUser?.uid || '').trim().toLowerCase();
+      if (studentKey) {
+        const res = await fetch(`/api/student-progress/${encodeURIComponent(studentKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lessonNotes: { [String(selectedLessonId)]: studentNotes },
+          }),
+        });
+        if (res.ok) {
+          setNotesSaveStatus('saved');
+          setTimeout(() => setNotesSaveStatus('idle'), 2500);
+          return;
+        }
+      }
+
+      if (!userToken) {
+        setNotesSaveStatus('saved');
+        setTimeout(() => setNotesSaveStatus('idle'), 2500);
+        return;
+      }
       const res = await fetch('/api/progress/notes', {
         method: 'POST',
         headers: {
@@ -448,6 +545,18 @@ export default function App() {
     // Find if notes exist for this lesson
     setStudentNotes('');
     setNotesSaveStatus('idle');
+
+    const studentKey = (appUser?.email || appUser?.uid || '').trim().toLowerCase();
+    if (studentKey) {
+      fetch(`/api/student-progress/${encodeURIComponent(studentKey)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.lessonNotes && data.lessonNotes[String(lessonId)]) {
+            setStudentNotes(data.lessonNotes[String(lessonId)]);
+          }
+        })
+        .catch(() => {});
+    }
     
     if (userToken) {
       fetch('/api/progress', {

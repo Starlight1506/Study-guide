@@ -25,6 +25,7 @@ import {
   getStoredStudents, 
   authenticateTeacher, 
   authenticateAdmin,
+  syncWithServer,
   ADMIN_CREDENTIALS,
   TEACHER_CREDENTIALS 
 } from '../services/studentManager';
@@ -50,11 +51,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [availableStudents, setAvailableStudents] = useState<Array<{ login: string; pass: string; name: string }>>([]);
 
   useEffect(() => {
-    const loaded = getStoredStudents();
-    setAvailableStudents(loaded.map(s => ({ login: s.login, pass: s.password, name: s.fullName })));
+    const refreshStudents = () => {
+      const loaded = getStoredStudents();
+      setAvailableStudents(loaded.map(s => ({ login: s.login, pass: s.password, name: s.fullName })));
+    };
+    refreshStudents();
+    syncWithServer().then(refreshStudents);
+    window.addEventListener('students_updated', refreshStudents);
+    return () => window.removeEventListener('students_updated', refreshStudents);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessInfo('');
@@ -87,7 +94,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     // Check if Teacher login
     if (selectedRole === 'teacher') {
-      const matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      let matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      if (!matchedTeacher) {
+        await syncWithServer();
+        matchedTeacher = authenticateTeacher(cleanInput, cleanPass);
+      }
       if (!matchedTeacher) {
         setError('O\'qituvchi logini yoki paroli noto\'g\'ri! Admin bergan o\'qituvchi login va parolini kiriting.');
         return;
@@ -107,7 +118,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     // Student Authentication
     if (selectedRole === 'student') {
-      const matchedStudent = authenticateStudent(cleanInput, cleanPass);
+      let matchedStudent = authenticateStudent(cleanInput, cleanPass);
+      if (!matchedStudent) {
+        await syncWithServer();
+        matchedStudent = authenticateStudent(cleanInput, cleanPass);
+      }
       if (matchedStudent) {
         const user: AppUser = {
           uid: matchedStudent.id,

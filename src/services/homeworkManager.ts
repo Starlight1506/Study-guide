@@ -384,9 +384,15 @@ export const processHomeworkFile = (
 };
 
 // Synchronize homework assignments and submissions with the shared server database
+const HW_CLOUD_MIGRATED_FLAG = 'it_portal_hw_cloud_migrated_v2';
+
 export const syncHomeworksWithServer = async (): Promise<void> => {
   if (typeof window === 'undefined') return;
   try {
+    const isMigrated = localStorage.getItem(HW_CLOUD_MIGRATED_FLAG) === 'true';
+    const localAssignments = getStoredAssignments();
+    const localSubmissions = getStoredSubmissions();
+
     const [hwRes, subRes] = await Promise.all([
       fetch('/api/homeworks'),
       fetch('/api/homework-submissions'),
@@ -397,8 +403,25 @@ export const syncHomeworksWithServer = async (): Promise<void> => {
     if (hwRes.ok) {
       const data = await hwRes.json();
       if (Array.isArray(data.assignments)) {
+        const hwMap = new Map<string, HomeworkAssignment>();
+        data.assignments.forEach((a: HomeworkAssignment) => hwMap.set(a.id, a));
+
+        if (!isMigrated) {
+          for (const locA of localAssignments) {
+            if (!hwMap.has(locA.id)) {
+              hwMap.set(locA.id, locA);
+              fetch('/api/homeworks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locA),
+              }).catch(() => {});
+            }
+          }
+        }
+
+        const merged = Array.from(hwMap.values());
         const currentRaw = localStorage.getItem(STORAGE_ASSIGNMENTS_KEY);
-        const nextRaw = JSON.stringify(data.assignments);
+        const nextRaw = JSON.stringify(merged);
         if (currentRaw !== nextRaw) {
           localStorage.setItem(STORAGE_ASSIGNMENTS_KEY, nextRaw);
           changed = true;
@@ -409,13 +432,34 @@ export const syncHomeworksWithServer = async (): Promise<void> => {
     if (subRes.ok) {
       const data = await subRes.json();
       if (Array.isArray(data.submissions)) {
+        const subMap = new Map<string, HomeworkSubmission>();
+        data.submissions.forEach((s: HomeworkSubmission) => subMap.set(s.id, s));
+
+        if (!isMigrated) {
+          for (const locS of localSubmissions) {
+            if (!subMap.has(locS.id)) {
+              subMap.set(locS.id, locS);
+              fetch('/api/homework-submissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locS),
+              }).catch(() => {});
+            }
+          }
+        }
+
+        const merged = Array.from(subMap.values());
         const currentRaw = localStorage.getItem(STORAGE_SUBMISSIONS_KEY);
-        const nextRaw = JSON.stringify(data.submissions);
+        const nextRaw = JSON.stringify(merged);
         if (currentRaw !== nextRaw) {
           localStorage.setItem(STORAGE_SUBMISSIONS_KEY, nextRaw);
           changed = true;
         }
       }
+    }
+
+    if (!isMigrated && hwRes.ok) {
+      localStorage.setItem(HW_CLOUD_MIGRATED_FLAG, 'true');
     }
 
     if (changed) {
@@ -428,6 +472,7 @@ export const syncHomeworksWithServer = async (): Promise<void> => {
 
 if (typeof window !== 'undefined') {
   syncHomeworksWithServer();
-  setInterval(syncHomeworksWithServer, 12000);
+  setInterval(syncHomeworksWithServer, 8000);
   window.addEventListener('focus', syncHomeworksWithServer);
+  window.addEventListener('students_updated', syncHomeworksWithServer);
 }

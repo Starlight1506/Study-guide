@@ -20,6 +20,14 @@ import {
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { eq, and, desc } from 'drizzle-orm';
+import {
+  initGlobalStore,
+  getGlobalList,
+  getGlobalItem,
+  upsertGlobalItem,
+  deleteGlobalItem,
+  clearGlobalCollection,
+} from './src/db/globalStore.ts';
 
 let genAIClient: GoogleGenAI | null = null;
 function getGenAI() {
@@ -37,6 +45,7 @@ function getGenAI() {
 }
 
 async function startServer() {
+  await initGlobalStore();
   const app = express();
   const PORT = 3000;
 
@@ -44,8 +53,8 @@ async function startServer() {
   app.use(express.json({ limit: '25mb' }));
 
   // API Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', globalSync: 'active', time: new Date().toISOString() });
   });
 
   // POST AI Assistant Chat (Socratic IT & Design Mentor with Strict Guardrails)
@@ -386,7 +395,7 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // GET all students
   app.get('/api/students', async (_req, res) => {
     try {
-      const records = await db.select().from(studentsTable);
+      const records = getGlobalList('students');
       res.json({ students: records.map(unpackStudentRow) });
     } catch (error: any) {
       console.error('Error fetching students:', error);
@@ -402,13 +411,19 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
         return res.status(400).json({ error: 'Missing student fields' });
       }
       const dbPayload = packStudentForDb(student);
-      const existing = await db.select().from(studentsTable).where(eq(studentsTable.id, student.id));
-      if (existing.length > 0) {
-        await db.update(studentsTable).set(dbPayload).where(eq(studentsTable.id, student.id));
-      } else {
-        await db.insert(studentsTable).values(dbPayload);
+      const unpacked = unpackStudentRow({ ...dbPayload, googleEmail: student.googleEmail || '' });
+      await upsertGlobalItem('students', unpacked);
+      try {
+        const existing = await db.select().from(studentsTable).where(eq(studentsTable.id, student.id));
+        if (existing.length > 0) {
+          await db.update(studentsTable).set(dbPayload).where(eq(studentsTable.id, student.id));
+        } else {
+          await db.insert(studentsTable).values(dbPayload);
+        }
+      } catch {
+        // Cloud Firestore + Disk globalStore is authoritative
       }
-      res.json({ success: true, student: unpackStudentRow(dbPayload) });
+      res.json({ success: true, student: unpacked });
     } catch (error: any) {
       console.error('Error saving student:', error);
       res.status(500).json({ error: error.message });
@@ -419,8 +434,17 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/students/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(studentsTable).where(eq(studentsTable.id, id));
-      await db.delete(studentGradesTable).where(eq(studentGradesTable.studentId, id));
+      await deleteGlobalItem('students', id);
+      const studentGrades = getGlobalList('grades').filter((g: any) => g.studentId === id);
+      for (const g of studentGrades) {
+        await deleteGlobalItem('grades', g.id);
+      }
+      try {
+        await db.delete(studentsTable).where(eq(studentsTable.id, id));
+        await db.delete(studentGradesTable).where(eq(studentGradesTable.studentId, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting student:', error);
@@ -431,7 +455,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // GET all grades
   app.get('/api/grades', async (_req, res) => {
     try {
-      const records = await db.select().from(studentGradesTable).orderBy(desc(studentGradesTable.gradedAt));
+      const records = getGlobalList('grades').sort(
+        (a: any, b: any) => new Date(b.gradedAt || 0).getTime() - new Date(a.gradedAt || 0).getTime()
+      );
       res.json({ grades: records });
     } catch (error: any) {
       console.error('Error fetching grades:', error);
@@ -446,11 +472,16 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!grade.id || !grade.studentId || typeof grade.score !== 'number') {
         return res.status(400).json({ error: 'Missing grade fields' });
       }
-      const existing = await db.select().from(studentGradesTable).where(eq(studentGradesTable.id, grade.id));
-      if (existing.length > 0) {
-        await db.update(studentGradesTable).set(grade).where(eq(studentGradesTable.id, grade.id));
-      } else {
-        await db.insert(studentGradesTable).values(grade);
+      await upsertGlobalItem('grades', grade);
+      try {
+        const existing = await db.select().from(studentGradesTable).where(eq(studentGradesTable.id, grade.id));
+        if (existing.length > 0) {
+          await db.update(studentGradesTable).set(grade).where(eq(studentGradesTable.id, grade.id));
+        } else {
+          await db.insert(studentGradesTable).values(grade);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, grade });
     } catch (error: any) {
@@ -463,7 +494,12 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/grades/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(studentGradesTable).where(eq(studentGradesTable.id, id));
+      await deleteGlobalItem('grades', id);
+      try {
+        await db.delete(studentGradesTable).where(eq(studentGradesTable.id, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting grade:', error);
@@ -474,7 +510,12 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // DELETE clear all grades
   app.delete('/api/grades', async (_req, res) => {
     try {
-      await db.delete(studentGradesTable);
+      await clearGlobalCollection('grades');
+      try {
+        await db.delete(studentGradesTable);
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error clearing grades:', error);
@@ -485,7 +526,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // GET all ratings
   app.get('/api/ratings', async (_req, res) => {
     try {
-      const records = await db.select().from(lessonRatingsTable).orderBy(desc(lessonRatingsTable.createdAt));
+      const records = getGlobalList('ratings').sort(
+        (a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
       res.json({ ratings: records });
     } catch (error: any) {
       console.error('Error fetching ratings:', error);
@@ -500,11 +543,16 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!rating.id || !rating.studentId || typeof rating.rating !== 'number') {
         return res.status(400).json({ error: 'Missing rating fields' });
       }
-      const existing = await db.select().from(lessonRatingsTable).where(eq(lessonRatingsTable.id, rating.id));
-      if (existing.length > 0) {
-        await db.update(lessonRatingsTable).set(rating).where(eq(lessonRatingsTable.id, rating.id));
-      } else {
-        await db.insert(lessonRatingsTable).values(rating);
+      await upsertGlobalItem('ratings', rating);
+      try {
+        const existing = await db.select().from(lessonRatingsTable).where(eq(lessonRatingsTable.id, rating.id));
+        if (existing.length > 0) {
+          await db.update(lessonRatingsTable).set(rating).where(eq(lessonRatingsTable.id, rating.id));
+        } else {
+          await db.insert(lessonRatingsTable).values(rating);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, rating });
     } catch (error: any) {
@@ -517,7 +565,12 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/ratings/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(lessonRatingsTable).where(eq(lessonRatingsTable.id, id));
+      await deleteGlobalItem('ratings', id);
+      try {
+        await db.delete(lessonRatingsTable).where(eq(lessonRatingsTable.id, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting rating:', error);
@@ -528,7 +581,12 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // DELETE clear all ratings
   app.delete('/api/ratings', async (_req, res) => {
     try {
-      await db.delete(lessonRatingsTable);
+      await clearGlobalCollection('ratings');
+      try {
+        await db.delete(lessonRatingsTable);
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error clearing ratings:', error);
@@ -542,10 +600,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // GET all homework assignments
   app.get('/api/homeworks', async (_req, res) => {
     try {
-      const records = await db
-        .select()
-        .from(homeworkAssignmentsTable)
-        .orderBy(desc(homeworkAssignmentsTable.createdAt));
+      const records = getGlobalList('homeworks').sort(
+        (a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
       res.json({ assignments: records });
     } catch (error: any) {
       console.error('Error fetching homeworks:', error);
@@ -560,17 +617,22 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!assignment.id || !assignment.title || !assignment.track) {
         return res.status(400).json({ error: 'Missing homework fields' });
       }
-      const existing = await db
-        .select()
-        .from(homeworkAssignmentsTable)
-        .where(eq(homeworkAssignmentsTable.id, assignment.id));
-      if (existing.length > 0) {
-        await db
-          .update(homeworkAssignmentsTable)
-          .set(assignment)
+      await upsertGlobalItem('homeworks', assignment);
+      try {
+        const existing = await db
+          .select()
+          .from(homeworkAssignmentsTable)
           .where(eq(homeworkAssignmentsTable.id, assignment.id));
-      } else {
-        await db.insert(homeworkAssignmentsTable).values(assignment);
+        if (existing.length > 0) {
+          await db
+            .update(homeworkAssignmentsTable)
+            .set(assignment)
+            .where(eq(homeworkAssignmentsTable.id, assignment.id));
+        } else {
+          await db.insert(homeworkAssignmentsTable).values(assignment);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, assignment });
     } catch (error: any) {
@@ -583,8 +645,17 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/homeworks/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(homeworkAssignmentsTable).where(eq(homeworkAssignmentsTable.id, id));
-      await db.delete(homeworkSubmissionsTable).where(eq(homeworkSubmissionsTable.assignmentId, id));
+      await deleteGlobalItem('homeworks', id);
+      const relatedSubs = getGlobalList('submissions').filter((s: any) => s.assignmentId === id);
+      for (const sub of relatedSubs) {
+        await deleteGlobalItem('submissions', sub.id);
+      }
+      try {
+        await db.delete(homeworkAssignmentsTable).where(eq(homeworkAssignmentsTable.id, id));
+        await db.delete(homeworkSubmissionsTable).where(eq(homeworkSubmissionsTable.assignmentId, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting homework:', error);
@@ -595,10 +666,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // GET all homework submissions
   app.get('/api/homework-submissions', async (_req, res) => {
     try {
-      const records = await db
-        .select()
-        .from(homeworkSubmissionsTable)
-        .orderBy(desc(homeworkSubmissionsTable.submittedAt));
+      const records = getGlobalList('submissions').sort(
+        (a: any, b: any) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime()
+      );
       res.json({ submissions: records });
     } catch (error: any) {
       console.error('Error fetching homework submissions:', error);
@@ -613,17 +683,22 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!submission.id || !submission.assignmentId || !submission.studentId) {
         return res.status(400).json({ error: 'Missing submission fields' });
       }
-      const existing = await db
-        .select()
-        .from(homeworkSubmissionsTable)
-        .where(eq(homeworkSubmissionsTable.id, submission.id));
-      if (existing.length > 0) {
-        await db
-          .update(homeworkSubmissionsTable)
-          .set(submission)
+      await upsertGlobalItem('submissions', submission);
+      try {
+        const existing = await db
+          .select()
+          .from(homeworkSubmissionsTable)
           .where(eq(homeworkSubmissionsTable.id, submission.id));
-      } else {
-        await db.insert(homeworkSubmissionsTable).values(submission);
+        if (existing.length > 0) {
+          await db
+            .update(homeworkSubmissionsTable)
+            .set(submission)
+            .where(eq(homeworkSubmissionsTable.id, submission.id));
+        } else {
+          await db.insert(homeworkSubmissionsTable).values(submission);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, submission });
     } catch (error: any) {
@@ -636,7 +711,12 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/homework-submissions/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(homeworkSubmissionsTable).where(eq(homeworkSubmissionsTable.id, id));
+      await deleteGlobalItem('submissions', id);
+      try {
+        await db.delete(homeworkSubmissionsTable).where(eq(homeworkSubmissionsTable.id, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting homework submission:', error);
@@ -650,10 +730,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // ---------------------------------------------------------------------------
   app.get('/api/smart-coins', async (_req, res) => {
     try {
-      const records = await db
-        .select()
-        .from(smartCoinsTable)
-        .orderBy(desc(smartCoinsTable.awardedAt));
+      const records = getGlobalList('smartCoins').sort(
+        (a: any, b: any) => new Date(b.awardedAt || 0).getTime() - new Date(a.awardedAt || 0).getTime()
+      );
       res.json({ coins: records });
     } catch (error: any) {
       console.error('Error fetching smart coins:', error);
@@ -678,17 +757,22 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
         });
       }
 
-      const existing = await db
-        .select()
-        .from(smartCoinsTable)
-        .where(eq(smartCoinsTable.id, coin.id));
-      if (existing.length > 0) {
-        await db
-          .update(smartCoinsTable)
-          .set(coin)
+      await upsertGlobalItem('smartCoins', coin);
+      try {
+        const existing = await db
+          .select()
+          .from(smartCoinsTable)
           .where(eq(smartCoinsTable.id, coin.id));
-      } else {
-        await db.insert(smartCoinsTable).values(coin);
+        if (existing.length > 0) {
+          await db
+            .update(smartCoinsTable)
+            .set(coin)
+            .where(eq(smartCoinsTable.id, coin.id));
+        } else {
+          await db.insert(smartCoinsTable).values(coin);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, coin });
     } catch (error: any) {
@@ -702,7 +786,7 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   // ---------------------------------------------------------------------------
   app.get('/api/teachers', async (_req, res) => {
     try {
-      const records = await db.select().from(teachersTable);
+      const records = getGlobalList('teachers');
       res.json({ teachers: records });
     } catch (error: any) {
       console.error('Error fetching teachers:', error);
@@ -716,17 +800,22 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!teacher.id || !teacher.login || !teacher.fullName || !teacher.password) {
         return res.status(400).json({ error: "O'qituvchi ma'lumotlari to'liq emas" });
       }
-      const existing = await db
-        .select()
-        .from(teachersTable)
-        .where(eq(teachersTable.id, teacher.id));
-      if (existing.length > 0) {
-        await db
-          .update(teachersTable)
-          .set(teacher)
+      await upsertGlobalItem('teachers', teacher);
+      try {
+        const existing = await db
+          .select()
+          .from(teachersTable)
           .where(eq(teachersTable.id, teacher.id));
-      } else {
-        await db.insert(teachersTable).values(teacher);
+        if (existing.length > 0) {
+          await db
+            .update(teachersTable)
+            .set(teacher)
+            .where(eq(teachersTable.id, teacher.id));
+        } else {
+          await db.insert(teachersTable).values(teacher);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, teacher });
     } catch (error: any) {
@@ -738,7 +827,12 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/teachers/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(teachersTable).where(eq(teachersTable.id, id));
+      await deleteGlobalItem('teachers', id);
+      try {
+        await db.delete(teachersTable).where(eq(teachersTable.id, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting teacher:', error);
@@ -748,10 +842,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
 
   app.get('/api/teacher-evaluations', async (_req, res) => {
     try {
-      const records = await db
-        .select()
-        .from(teacherEvaluationsTable)
-        .orderBy(desc(teacherEvaluationsTable.evaluatedAt));
+      const records = getGlobalList('teacherEvaluations').sort(
+        (a: any, b: any) => new Date(b.evaluatedAt || 0).getTime() - new Date(a.evaluatedAt || 0).getTime()
+      );
       res.json({ evaluations: records });
     } catch (error: any) {
       console.error('Error fetching teacher evaluations:', error);
@@ -765,17 +858,22 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       if (!evaluation.id || !evaluation.teacherId || typeof evaluation.score !== 'number') {
         return res.status(400).json({ error: "Baholash ma'lumotlari to'liq emas" });
       }
-      const existing = await db
-        .select()
-        .from(teacherEvaluationsTable)
-        .where(eq(teacherEvaluationsTable.id, evaluation.id));
-      if (existing.length > 0) {
-        await db
-          .update(teacherEvaluationsTable)
-          .set(evaluation)
+      await upsertGlobalItem('teacherEvaluations', evaluation);
+      try {
+        const existing = await db
+          .select()
+          .from(teacherEvaluationsTable)
           .where(eq(teacherEvaluationsTable.id, evaluation.id));
-      } else {
-        await db.insert(teacherEvaluationsTable).values(evaluation);
+        if (existing.length > 0) {
+          await db
+            .update(teacherEvaluationsTable)
+            .set(evaluation)
+            .where(eq(teacherEvaluationsTable.id, evaluation.id));
+        } else {
+          await db.insert(teacherEvaluationsTable).values(evaluation);
+        }
+      } catch {
+        // Non-fatal
       }
       res.json({ success: true, evaluation });
     } catch (error: any) {
@@ -787,10 +885,95 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
   app.delete('/api/teacher-evaluations/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(teacherEvaluationsTable).where(eq(teacherEvaluationsTable.id, id));
+      await deleteGlobalItem('teacherEvaluations', id);
+      try {
+        await db.delete(teacherEvaluationsTable).where(eq(teacherEvaluationsTable.id, id));
+      } catch {
+        // Non-fatal
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting teacher evaluation:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // PORTAL META: CUSTOM LESSON VIDEOS & GLOBAL STUDENT LESSON PROGRESS
+  // ---------------------------------------------------------------------------
+  app.get('/api/portal-meta', (_req, res) => {
+    const videosItem = getGlobalItem<{ id: string; videos: Record<string, string> }>('meta', 'teacher_videos');
+    res.json({
+      teacherVideos: videosItem?.videos || {},
+    });
+  });
+
+  app.post('/api/portal-meta/videos', async (req, res) => {
+    try {
+      const { videos } = req.body || {};
+      if (!videos || typeof videos !== 'object') {
+        return res.status(400).json({ error: 'Invalid videos map' });
+      }
+      await upsertGlobalItem('meta', {
+        id: 'teacher_videos',
+        videos,
+        updatedAt: new Date().toISOString(),
+      });
+      res.json({ success: true, teacherVideos: videos });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/student-progress/:studentKey', (req, res) => {
+    const cleanKey = String(req.params.studentKey || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_');
+    const docId = `prog_${cleanKey}`;
+    const item = getGlobalItem<{
+      id: string;
+      completedLessons: number[];
+      designCompletedLessons: number[];
+      lessonNotes: Record<string, string>;
+    }>('meta', docId);
+    res.json({
+      completedLessons: item?.completedLessons || [],
+      designCompletedLessons: item?.designCompletedLessons || [],
+      lessonNotes: item?.lessonNotes || {},
+    });
+  });
+
+  app.post('/api/student-progress/:studentKey', async (req, res) => {
+    try {
+      const cleanKey = String(req.params.studentKey || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_');
+      const docId = `prog_${cleanKey}`;
+      const existing = getGlobalItem<{
+        id: string;
+        completedLessons?: number[];
+        designCompletedLessons?: number[];
+        lessonNotes?: Record<string, string>;
+      }>('meta', docId) || { id: docId };
+
+      const { completedLessons, designCompletedLessons, lessonNotes } = req.body || {};
+      const updated = await upsertGlobalItem('meta', {
+        id: docId,
+        completedLessons: Array.isArray(completedLessons)
+          ? completedLessons
+          : existing.completedLessons || [],
+        designCompletedLessons: Array.isArray(designCompletedLessons)
+          ? designCompletedLessons
+          : existing.designCompletedLessons || [],
+        lessonNotes:
+          lessonNotes && typeof lessonNotes === 'object'
+            ? { ...(existing.lessonNotes || {}), ...lessonNotes }
+            : existing.lessonNotes || {},
+      });
+      res.json({ success: true, progress: updated });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
@@ -1123,7 +1306,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
 
   app.get('/api/sms-logs', async (_req, res) => {
     try {
-      const logs = await db.select().from(smsLogsTable).orderBy(desc(smsLogsTable.sentAt));
+      const logs = getGlobalList('smsLogs').sort(
+        (a: any, b: any) => new Date(b.sentAt || 0).getTime() - new Date(a.sentAt || 0).getTime()
+      );
       res.json({ logs });
     } catch (error: any) {
       console.error('Error fetching SMS logs:', error);
@@ -1150,6 +1335,8 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
         studentId: studentId || 'manual',
         studentName: studentName || "O'quvchi",
         phone: displayContact,
+        googleEmail: googleEmail || '',
+        channel: channel || 'sms',
         groupId: groupId || 'manual',
         groupName: groupName || 'Dars eslatmasi',
         lessonDateKey: lessonDateKey || new Date().toISOString().slice(0, 10),
@@ -1157,8 +1344,13 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
         status,
         sentAt: new Date().toISOString(),
       };
-      await db.insert(smsLogsTable).values(record);
-      res.json({ success: true, log: { ...record, googleEmail, channel: channel || 'sms' } });
+      await upsertGlobalItem('smsLogs', record);
+      try {
+        await db.insert(smsLogsTable).values(record);
+      } catch {
+        // Non-fatal
+      }
+      res.json({ success: true, log: record });
     } catch (error: any) {
       console.error('Error sending SMS:', error);
       res.status(500).json({ error: error.message });
@@ -1208,9 +1400,9 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
       const currentMinutes = tashkentTime.getHours() * 60 + tashkentTime.getMinutes();
       const dateKey = `${tashkentTime.getFullYear()}-${String(tashkentTime.getMonth() + 1).padStart(2, '0')}-${String(tashkentTime.getDate()).padStart(2, '0')}`;
 
-      const rawStudents = await db.select().from(studentsTable);
+      const rawStudents = getGlobalList('students');
       const allStudents = rawStudents.map(unpackStudentRow);
-      const existingLogs = await db.select().from(smsLogsTable);
+      const existingLogs = getGlobalList('smsLogs');
 
       for (const grp of SERVER_SCHEDULE_GROUPS) {
         if (!grp.days.includes(dayOfWeek)) continue;
@@ -1227,7 +1419,7 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
 
           for (const st of groupStudents) {
             const lessonKey = `${grp.id}_${dateKey}_${st.id}`;
-            const alreadySent = existingLogs.some((l) => l.lessonDateKey === lessonKey);
+            const alreadySent = existingLogs.some((l: any) => l.lessonDateKey === lessonKey);
             if (alreadySent) continue;
 
             const hasValidPhone = Boolean(st.phone && st.phone.trim().length >= 7);
@@ -1273,18 +1465,27 @@ SENING QAT'IY CHEKLOVLARING VA OLTIN QOIDALARING (BULARNI BUZISH QAT'IYAN MAN ET
                   ? st.googleEmail!
                   : st.phone!;
 
-              await db.insert(smsLogsTable).values({
+              const logItem = {
                 id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 studentId: st.id,
                 studentName: st.fullName,
                 phone: contactDisplay,
+                googleEmail: st.googleEmail || '',
+                channel: smsSent && emailSent ? 'both' : emailSent ? 'gmail' : 'sms',
                 groupId: grp.id,
                 groupName: grp.name,
                 lessonDateKey: lessonKey,
                 message: smsMsg,
                 status,
                 sentAt: new Date().toISOString(),
-              });
+              };
+
+              await upsertGlobalItem('smsLogs', logItem);
+              try {
+                await db.insert(smsLogsTable).values(logItem);
+              } catch {
+                // Non-fatal
+              }
             }
           }
         }

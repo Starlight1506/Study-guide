@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "PortalRecord": {
+      "title": "PortalRecord",
+      "description": "Global record stored across devices for IT Ta'lim Portali",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the record",
+          "maxLength": 128
+        },
+        "payload": {
+          "type": "string",
+          "description": "Serialized JSON payload of the record",
+          "maxLength": 900000
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "payload", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/portal_students/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global student accounts"
+    },
+    "/portal_grades/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global student grades"
+    },
+    "/portal_ratings/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global anonymous lesson ratings"
+    },
+    "/portal_homeworks/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global homework assignments"
+    },
+    "/portal_submissions/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global homework submissions"
+    },
+    "/portal_coins/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global Smart Coin awards"
+    },
+    "/portal_teachers/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global teacher accounts"
+    },
+    "/portal_evaluations/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global admin teacher evaluations"
+    },
+    "/portal_sms_logs/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global SMS and Gmail reminder logs"
+    },
+    "/portal_meta/{docId}": {
+      "schema": "PortalRecord",
+      "description": "Global portal metadata, custom videos, and student progress"
+    }
+  }
+}
